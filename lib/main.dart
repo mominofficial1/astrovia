@@ -9,9 +9,27 @@ import 'theme/astrovia_theme.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Catch any unhandled Flutter framework errors
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) {
+      print('FlutterError caught: ${details.exception}');
+    }
+  };
+
+  // Catch any unhandled asynchronous platform errors to prevent application closing
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) {
+      print('PlatformDispatcher error caught: $error\n$stack');
+    }
+    return true; // Return true to prevent app crash
+  };
+
   // Register Windows Media Foundation video player plugin on Windows
   if (!kIsWeb && Platform.isWindows) {
-    WindowsVideoPlayer.registerWith();
+    try {
+      WindowsVideoPlayer.registerWith();
+    } catch (_) {}
   }
 
   // Force Landscape Orientation for Android & Mobile (Section 6, 13, 21)
@@ -21,7 +39,9 @@ void main() {
   ]);
 
   // Full-screen immersive mode (no Android system navigation bars obstructing the game)
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  try {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  } catch (_) {}
 
   runApp(const AstroviaApp());
 }

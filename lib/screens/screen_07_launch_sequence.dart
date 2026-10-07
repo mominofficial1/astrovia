@@ -52,6 +52,9 @@ class _Screen07LaunchSequenceState extends State<Screen07LaunchSequence>
   }
 
   void _triggerLiftoff() {
+    if (_liftoffTriggered) return;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
     setState(() {
       _liftoffTriggered = true;
     });

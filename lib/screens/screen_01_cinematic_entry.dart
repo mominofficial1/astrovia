@@ -104,7 +104,34 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Badge: AAA Space Simulator Prototype
+                    // Official Logo Icon
+                    FadeTransition(
+                      opacity: _titleOpacity,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AstroviaTheme.cyan.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            'assets/images/astrovia_logo.png',
+                            width: 68,
+                            height: 68,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Badge: Deep Space Exploration Archive
                     FadeTransition(
                       opacity: _titleOpacity,
                       child: Container(
@@ -129,7 +156,7 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 14),
 
                     // Main Title: ASTROVIA with soft white and cyan glow
                     FadeTransition(

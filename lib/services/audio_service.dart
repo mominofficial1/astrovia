@@ -4,25 +4,55 @@ import '../state/mission_state.dart';
 
 class AudioService {
   static final AudioService instance = AudioService._internal();
-  AudioService._internal();
+  AudioService._internal() {
+    _initPlayer();
+  }
 
-  final AudioPlayer _sfxPlayer = AudioPlayer();
+  AudioPlayer? _sfxPlayer;
+  bool _isDisposed = false;
+  bool _isPlaying = false;
+
+  void _initPlayer() {
+    try {
+      _sfxPlayer = AudioPlayer();
+      _sfxPlayer?.setReleaseMode(ReleaseMode.stop).catchError((_) {});
+    } catch (e) {
+      if (kDebugMode) {
+        print('AudioService init error: $e');
+      }
+    }
+  }
 
   Future<void> _play(String assetName) async {
-    // If sound is muted in mission state, do not play
+    if (_isDisposed) return;
     if (MissionState.instance.soundMuted) return;
 
+    // Concurrency guard: avoid overlapping native MediaPlayer calls that crash Android
+    if (_isPlaying) return;
+    _isPlaying = true;
+
     try {
-      // audioplayers plays from AssetSource without leading 'assets/'
+      if (_sfxPlayer == null) {
+        _initPlayer();
+      }
       final cleanPath = assetName.startsWith('assets/')
           ? assetName.substring(7)
           : assetName;
-      await _sfxPlayer.stop();
-      await _sfxPlayer.play(AssetSource(cleanPath), volume: 0.85);
+
+      final player = _sfxPlayer;
+      if (player != null) {
+        await player.stop().catchError((_) {});
+        await player.play(AssetSource(cleanPath), volume: 0.85).catchError((_) {});
+      }
     } catch (e) {
       if (kDebugMode) {
         print('AudioService error playing $assetName: $e');
       }
+    } finally {
+      // Short delay before allowing next sound to avoid native buffer overflow
+      Future.delayed(const Duration(milliseconds: 140), () {
+        _isPlaying = false;
+      });
     }
   }
 
@@ -33,6 +63,11 @@ class AudioService {
   void playSuccess() => _play('assets/audio/success_chime.wav');
 
   void dispose() {
-    _sfxPlayer.dispose();
+    _isDisposed = true;
+    try {
+      _sfxPlayer?.dispose().catchError((_) {});
+      _sfxPlayer = null;
+    } catch (_) {}
   }
 }
+

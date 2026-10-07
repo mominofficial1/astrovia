@@ -35,12 +35,14 @@ class _AstroviaVideoBackgroundState extends State<AstroviaVideoBackground>
   bool _isInitialized = false;
   bool _hasError = false;
   bool _isMuted = true;
+  bool _isDisposed = false;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _isDisposed = false;
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -63,35 +65,49 @@ class _AstroviaVideoBackgroundState extends State<AstroviaVideoBackground>
   }
 
   Future<void> _initializeVideo() async {
-    try {
-      final controller = VideoPlayerController.asset(widget.videoAsset);
-      _controller = controller;
+    if (_isDisposed) return;
 
+    VideoPlayerController? controller;
+    try {
+      controller = VideoPlayerController.asset(widget.videoAsset);
       await controller.initialize();
-      if (!mounted) return;
+
+      if (!mounted || _isDisposed) {
+        await controller.dispose().catchError((_) {});
+        return;
+      }
 
       // Ensure audio is muted by default (Section 20)
-      await controller.setVolume(0.0);
-      await controller.setLooping(widget.loop);
+      await controller.setVolume(0.0).catchError((_) {});
+      await controller.setLooping(widget.loop).catchError((_) {});
 
       if (!widget.loop && widget.onFinished != null) {
         controller.addListener(_videoListener);
       }
 
-      if (widget.autoPlay) {
-        await controller.play();
+      if (widget.autoPlay && mounted && !_isDisposed) {
+        await controller.play().catchError((_) {});
       }
 
-      setState(() {
-        _isInitialized = true;
-        _hasError = false;
-      });
-      _fadeController.forward();
+      if (mounted && !_isDisposed) {
+        setState(() {
+          _controller = controller;
+          _isInitialized = true;
+          _hasError = false;
+        });
+        _fadeController.forward();
+      } else {
+        await controller.dispose().catchError((_) {});
+      }
     } catch (e) {
       if (kDebugMode) {
         print('AstroviaVideoBackground: Fallback active for ${widget.videoAsset}: $e');
       }
-      if (mounted) {
+      try {
+        await controller?.dispose().catchError((_) {});
+      } catch (_) {}
+
+      if (mounted && !_isDisposed) {
         setState(() {
           _hasError = true;
           _isInitialized = false;
@@ -112,12 +128,15 @@ class _AstroviaVideoBackgroundState extends State<AstroviaVideoBackground>
 
   void _cleanupController() {
     final c = _controller;
-    if (c != null) {
-      c.removeListener(_videoListener);
-      c.dispose();
-      _controller = null;
-    }
+    _controller = null;
     _isInitialized = false;
+    if (c != null) {
+      try {
+        c.removeListener(_videoListener);
+        c.pause().catchError((_) {});
+        c.dispose().catchError((_) {});
+      } catch (_) {}
+    }
   }
 
   void _toggleMute() {
@@ -125,13 +144,14 @@ class _AstroviaVideoBackgroundState extends State<AstroviaVideoBackground>
     if (c != null && c.value.isInitialized) {
       setState(() {
         _isMuted = !_isMuted;
-        c.setVolume(_isMuted ? 0.0 : 1.0);
+        c.setVolume(_isMuted ? 0.0 : 1.0).catchError((_) {});
       });
     }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _cleanupController();
     _fadeController.dispose();
     super.dispose();
