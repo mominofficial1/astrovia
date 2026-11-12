@@ -97,6 +97,105 @@ class MissionState extends ChangeNotifier {
     return false;
   }
 
+  bool buyShopItem({
+    required String category,
+    required String id,
+    required int cost,
+  }) {
+    if (saveData.coins < cost) return false;
+
+    bool isOwned = false;
+    switch (category) {
+      case "suit":
+        isOwned = saveData.ownedSuitIds.contains(id);
+        if (!isOwned) saveData.ownedSuitIds.add(id);
+        saveData.playerProfile.suitId = id;
+        break;
+      case "visor":
+        isOwned = saveData.ownedVisorIds.contains(id);
+        if (!isOwned) saveData.ownedVisorIds.add(id);
+        saveData.playerProfile.helmetVisorTint = id;
+        break;
+      case "backpack":
+        isOwned = saveData.ownedBackpackIds.contains(id);
+        if (!isOwned) saveData.ownedBackpackIds.add(id);
+        saveData.playerProfile.backpackType = id;
+        break;
+      case "boots":
+        isOwned = saveData.ownedBootsIds.contains(id);
+        if (!isOwned) saveData.ownedBootsIds.add(id);
+        saveData.playerProfile.bootsType = id;
+        break;
+      case "colorway":
+        isOwned = saveData.ownedColorways.contains(id);
+        if (!isOwned) saveData.ownedColorways.add(id);
+        break;
+      case "patch":
+        isOwned = saveData.ownedPatches.contains(id);
+        if (!isOwned) saveData.ownedPatches.add(id);
+        saveData.playerProfile.missionPatch = id;
+        break;
+      case "livery":
+        isOwned = saveData.ownedLiveries.contains(id);
+        if (!isOwned) saveData.ownedLiveries.add(id);
+        break;
+    }
+
+    if (isOwned) return false;
+    saveData.coins -= cost;
+    SaveManager.instance.save();
+    notifyListeners();
+    return true;
+  }
+
+  void equipShopItem({
+    required String category,
+    required String id,
+  }) {
+    switch (category) {
+      case "suit":
+        if (saveData.ownedSuitIds.contains(id) || id == "explorer") {
+          saveData.playerProfile.suitId = id;
+        }
+        break;
+      case "visor":
+        if (saveData.ownedVisorIds.contains(id) || id == "gold") {
+          saveData.playerProfile.helmetVisorTint = id;
+        }
+        break;
+      case "backpack":
+        if (saveData.ownedBackpackIds.contains(id) || id == "plss_compact") {
+          saveData.playerProfile.backpackType = id;
+        }
+        break;
+      case "boots":
+        if (saveData.ownedBootsIds.contains(id) || id == "lunar_tread") {
+          saveData.playerProfile.bootsType = id;
+        }
+        break;
+      case "colorway":
+        if (saveData.ownedColorways.contains(id) || id == "white") {
+          if (id == "white") saveData.playerProfile.primaryColorValue = 0xFFF0F4F8;
+          if (id == "navy") saveData.playerProfile.primaryColorValue = 0xFF0D1B2A;
+          if (id == "black") saveData.playerProfile.primaryColorValue = 0xFF1A1A1A;
+          if (id == "orange") saveData.playerProfile.primaryColorValue = 0xFFFF6F00;
+        }
+        break;
+      case "patch":
+        if (saveData.ownedPatches.contains(id) || id == "spaceapps2026") {
+          saveData.playerProfile.missionPatch = id;
+        }
+        break;
+      case "livery":
+        if (saveData.ownedLiveries.contains(id) || id == "apollo_white") {
+          // liveries equipped to vehicle
+        }
+        break;
+    }
+    SaveManager.instance.save();
+    notifyListeners();
+  }
+
   // --- Spacecraft Selection & Builder ---
   void selectRocket(String rocketName) {
     saveData.activeSpacecraftBuildName = rocketName;

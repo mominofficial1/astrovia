@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/mission_model.dart';
+import '../rendering/planetary_environment_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
-import '../widgets/astrovia_video_background.dart';
 import '../widgets/hud_container.dart';
 import 'screen_launch_flight.dart';
 import 'screen_rocket_builder.dart';
@@ -24,9 +24,10 @@ class Screen06MissionBriefing extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
-      body: AstroviaVideoBackground(
-        videoAsset: mission.defaultVideoAsset,
-        overlayOpacity: 0.45,
+      body: PlanetaryEnvironmentWidget(
+        planetaryData: mission.planetaryData,
+        levelNumber: mission.levelNumber,
+        isOrbital: mission.levelNumber == 1 || mission.levelNumber == 6 || mission.levelNumber == 7 || mission.levelNumber == 8 || mission.levelNumber == 9,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 14.0),

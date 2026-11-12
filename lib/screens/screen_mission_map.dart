@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/mission_model.dart';
+import '../models/planetary_data.dart';
+import '../rendering/planetary_environment_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
-import '../widgets/astrovia_video_background.dart';
 import 'screen_06_mission_briefing.dart';
 
 class ScreenMissionMap extends StatefulWidget {
@@ -276,9 +277,10 @@ class _ScreenMissionMapState extends State<ScreenMissionMap> {
 
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
-      body: AstroviaVideoBackground(
-        videoAsset: 'assets/videos/space_background.mp4',
-        overlayOpacity: 0.45,
+      body: PlanetaryEnvironmentWidget(
+        planetaryData: PlanetaryData.earth,
+        levelNumber: 1,
+        isOrbital: true,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
@@ -575,3 +577,4 @@ class _ScreenMissionMapState extends State<ScreenMissionMap> {
     );
   }
 }
+

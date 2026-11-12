@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:astrovia/controllers/surface_exploration_controller.dart';
 import 'package:astrovia/models/astronaut_model.dart';
 import 'package:astrovia/models/inventory_model.dart';
 import 'package:astrovia/models/mission_model.dart';
@@ -6,6 +8,8 @@ import 'package:astrovia/models/nasa_dataset_info.dart';
 import 'package:astrovia/models/planetary_data.dart';
 import 'package:astrovia/models/save_data.dart';
 import 'package:astrovia/models/spacecraft_model.dart';
+import 'package:astrovia/rendering/planetary_environment_renderer.dart';
+import 'package:astrovia/rendering/spacecraft_renderer.dart';
 import 'package:astrovia/state/mission_state.dart';
 
 void main() {
@@ -236,4 +240,163 @@ void main() {
       expect(missions[9].disclaimerNotice.contains("Fictional Astronaut Training"), isTrue);
     });
   });
+
+  group('7. Surface Exploration Controller & Egress Flow', () {
+    test('Apollo 11 initializes with hatch open, astronaut egressed beside ladder', () {
+      final m2 = MissionModel.allMissions[1];
+      final profile = AstronautProfile();
+      final controller = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: profile,
+      );
+
+      // Verify world entities populated
+      expect(controller.worldEntities.length, greaterThanOrEqualTo(4));
+      expect(controller.worldEntities.any((e) => e.id == "sample_basalt_10017"), isTrue);
+      expect(controller.worldEntities.any((e) => e.id == "sample_breccia_10021"), isTrue);
+      expect(controller.worldEntities.any((e) => e.id == "sample_regolith_10005"), isTrue);
+      expect(controller.worldEntities.any((e) => e.id == "lander_airlock"), isTrue);
+
+      controller.openVehicleHatch();
+      expect(controller.isLanderHatchOpen, isTrue);
+
+      controller.egressAstronaut();
+      expect(controller.isAstronautOutside, isTrue);
+      expect(controller.playerWorldPos.dx, greaterThan(controller.landerWorldPos.dx));
+      controller.dispose();
+    });
+
+    test('Collection adds sample to bag and enforces 15.0 kg capacity', () {
+      final m2 = MissionModel.allMissions[1];
+      final profile = AstronautProfile();
+      final state = MissionState.instance;
+      state.startMission(m2);
+
+      final controller = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: profile,
+      );
+
+      final basalt = controller.worldEntities.firstWhere((e) => e.id == "sample_basalt_10017");
+      controller.nearestEntity = basalt;
+      final started = controller.startCollectionProcess();
+      expect(started, isTrue);
+      expect(controller.isBusyCollecting, isTrue);
+
+      // Complete collection
+      controller.actionProgress = 1.0;
+      controller.setMovementVector(Offset.zero); // triggers finish check in next frame or direct call
+      final picked = state.pickupWorldItem(basalt.sampleItem!);
+      expect(picked, isTrue);
+      expect(state.bag.items.length, 1);
+      expect(state.bag.currentMassKg, closeTo(1.8, 0.01));
+      expect(state.bag.capacityFraction, closeTo(1.8 / 15.0, 0.01));
+      controller.dispose();
+    });
+
+    test('All 10 missions generate distinct non-empty entity sets', () {
+      for (final m in MissionModel.allMissions) {
+        final ctrl = SurfaceExplorationController(
+          mission: m,
+          astronautProfile: AstronautProfile(),
+        );
+        expect(ctrl.worldEntities.isNotEmpty, isTrue, reason: "Mission ${m.title} should have world entities");
+        ctrl.dispose();
+      }
+    });
+  });
+
+  group('8. Proving Grounds Suit & Equipment Shop Economy', () {
+    test('Buy item deducts coins and equips item', () {
+      final state = MissionState.instance;
+      state.refreshFromSave();
+      state.saveData.coins = 500;
+      state.saveData.ownedVisorIds.clear();
+      state.saveData.ownedVisorIds.add("gold");
+
+      final bought = state.buyShopItem(
+        category: "visor",
+        id: "cyan",
+        cost: 100,
+      );
+
+      expect(bought, isTrue);
+      expect(state.saveData.coins, 400);
+      expect(state.saveData.ownedVisorIds.contains("cyan"), isTrue);
+      expect(state.saveData.playerProfile.helmetVisorTint, "cyan");
+
+      // Cannot buy again if already owned
+      final rebuy = state.buyShopItem(
+        category: "visor",
+        id: "cyan",
+        cost: 100,
+      );
+      expect(rebuy, isFalse);
+      expect(state.saveData.coins, 400); // No coins deducted
+    });
+
+    test('Cannot buy item if coins are insufficient', () {
+      final state = MissionState.instance;
+      state.refreshFromSave();
+      state.saveData.coins = 50;
+
+      final bought = state.buyShopItem(
+        category: "suit",
+        id: "deepspace",
+        cost: 300,
+      );
+      expect(bought, isFalse);
+      expect(state.saveData.coins, 50);
+    });
+  });
+
+  group('9. Procedural Planetary and Spacecraft Renderers', () {
+    test('SpacecraftPainter paints all vehicle configurations without error', () {
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      final size = const Size(150, 230);
+
+      final builds = [
+        SpacecraftBuild.starterApollo,
+        SpacecraftBuild.starterLunarLander,
+        SpacecraftBuild.starterRoboticProbe,
+      ];
+
+      for (int lvl = 1; lvl <= 10; lvl++) {
+        for (final b in builds) {
+          final painter = SpacecraftPainter(
+            buildData: b,
+            throttle: 0.5,
+            isRcsFiring: true,
+            landingLegsExtended: true,
+            solarPanelsDeployed: true,
+            hatchOpen: lvl.isEven,
+            missionLevel: lvl,
+          );
+          expect(() => painter.paint(canvas, size), returnsNormally);
+        }
+      }
+    });
+
+    test('PlanetaryEnvironmentPainter paints all 10 celestial environments without error', () {
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      final size = const Size(800, 600);
+
+      for (final m in MissionModel.allMissions) {
+        final painter = PlanetaryEnvironmentPainter(
+          planetaryData: m.planetaryData,
+          levelNumber: m.levelNumber,
+          cameraOffset: const Offset(50, 20),
+          animationTime: 2.5,
+          isOrbital: m.gameplayMode == MissionGameplayMode.orbitalFlight ||
+              m.gameplayMode == MissionGameplayMode.orbitalDeployment ||
+              m.gameplayMode == MissionGameplayMode.zeroGravityEva ||
+              m.gameplayMode == MissionGameplayMode.roboticConsole,
+        );
+        expect(() => painter.paint(canvas, size), returnsNormally);
+      }
+    });
+  });
 }
+

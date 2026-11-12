@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/mission_model.dart';
+import '../rendering/planetary_environment_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
-import '../widgets/astrovia_video_background.dart';
 import 'screen_06_mission_briefing.dart';
 import 'screen_mission_map.dart';
 
@@ -110,9 +110,10 @@ class _Screen10MissionResultsState extends State<Screen10MissionResults>
 
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
-      body: AstroviaVideoBackground(
-        videoAsset: 'assets/videos/astrovia_intro.mp4',
-        overlayOpacity: 0.45,
+      body: PlanetaryEnvironmentWidget(
+        planetaryData: mission.planetaryData,
+        levelNumber: mission.levelNumber,
+        isOrbital: true,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),

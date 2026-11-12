@@ -5,6 +5,7 @@ import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
 import '../widgets/hud_container.dart';
+import 'screen_suit_shop.dart';
 
 class ScreenAstronautCustomization extends StatefulWidget {
   const ScreenAstronautCustomization({super.key});
@@ -92,23 +93,66 @@ class _ScreenAstronautCustomizationState
                       letterSpacing: 2.0,
                     ),
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          AstroviaTheme.cyan.withValues(alpha: 0.25),
-                      side: const BorderSide(color: AstroviaTheme.cyan),
-                    ),
-                    icon: const Icon(Icons.save_rounded,
-                        size: 16, color: AstroviaTheme.cyan),
-                    label: Text(
-                      "SAVE LOADOUT",
-                      style: AstroviaTheme.orbitron(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AstroviaTheme.white,
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              AstroviaTheme.gold.withValues(alpha: 0.25),
+                          side: const BorderSide(color: AstroviaTheme.gold),
+                        ),
+                        icon: const Icon(Icons.storefront_rounded,
+                            size: 16, color: AstroviaTheme.gold),
+                        label: Text(
+                          "SUIT SHOP",
+                          style: AstroviaTheme.orbitron(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.gold,
+                          ),
+                        ),
+                        onPressed: () {
+                          AudioService.instance.playClick();
+                          Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder: (ctx, a1, a2) =>
+                                  const ScreenSuitShop(),
+                              transitionsBuilder: (ctx, a1, a2, child) =>
+                                  FadeTransition(opacity: a1, child: child),
+                            ),
+                          ).then((_) {
+                            if (mounted) {
+                              setState(() {
+                                final current = MissionState
+                                    .instance.saveData.playerProfile;
+                                _profile = AstronautProfile.fromJson(
+                                    current.toJson());
+                              });
+                            }
+                          });
+                        },
                       ),
-                    ),
-                    onPressed: _saveProfile,
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              AstroviaTheme.cyan.withValues(alpha: 0.25),
+                          side: const BorderSide(color: AstroviaTheme.cyan),
+                        ),
+                        icon: const Icon(Icons.save_rounded,
+                            size: 16, color: AstroviaTheme.cyan),
+                        label: Text(
+                          "SAVE LOADOUT",
+                          style: AstroviaTheme.orbitron(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.white,
+                          ),
+                        ),
+                        onPressed: _saveProfile,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -963,3 +1007,4 @@ class _ScreenAstronautCustomizationState
     );
   }
 }
+

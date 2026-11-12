@@ -252,3 +252,4 @@ class AstronautProfile {
         accessories: (json['accessories'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
       );
 }
+

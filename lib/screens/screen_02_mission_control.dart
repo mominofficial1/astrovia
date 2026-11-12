@@ -12,6 +12,7 @@ import 'screen_mission_map.dart';
 import 'screen_nasa_credits.dart';
 import 'screen_rocket_builder.dart';
 import 'screen_settings.dart';
+import 'screen_suit_shop.dart';
 
 class Screen02MissionControl extends StatefulWidget {
   const Screen02MissionControl({super.key});
@@ -278,18 +279,16 @@ class _Screen02MissionControlState extends State<Screen02MissionControl> {
                                 _navTo(context, const ScreenSettings()),
                           ),
 
-                          // Quick Launch Direct Shortcut Card
+                          // 8. Suit & Equipment Shop
                           _buildNavCard(
                             context: context,
-                            title: "EXPEDITION BRIEFING",
-                            subtitle: "REVIEW TARGET METRICS",
-                            imageAsset: "assets/images/card_launch.jpg",
-                            icon: Icons.rocket_launch_rounded,
-                            onTap: () {
-                              state.startMission(activeMission);
-                              _navTo(
-                                  context, const Screen06MissionBriefing());
-                            },
+                            title: "SUIT & OUTFIT SHOP",
+                            subtitle: "BUY SUITS, VISORS & RIGS",
+                            imageAsset: "assets/images/suit_explorer.jpg",
+                            icon: Icons.storefront_rounded,
+                            isGold: true,
+                            onTap: () =>
+                                _navTo(context, const ScreenSuitShop()),
                           ),
                         ],
                       );

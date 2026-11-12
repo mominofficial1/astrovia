@@ -3,10 +3,11 @@ import 'package:flutter/services.dart';
 import '../controllers/surface_exploration_controller.dart';
 import '../models/mission_model.dart';
 import '../rendering/astronaut_renderer.dart';
+import '../rendering/planetary_environment_renderer.dart';
+import '../rendering/spacecraft_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
-import '../widgets/astrovia_video_background.dart';
 import 'screen_equipment_inventory.dart';
 import 'screen_10_mission_results.dart';
 
@@ -41,6 +42,9 @@ class _Screen08PlanetaryExplorationState
       },
     );
 
+    // Initial state: Hatch open, astronaut ready on surface
+    _controller.isLanderHatchOpen = true;
+    _controller.isAstronautOutside = true;
     _controller.startExploration();
   }
 
@@ -218,7 +222,7 @@ class _Screen08PlanetaryExplorationState
 
   void _handleCollect() {
     AudioService.instance.playClick();
-    _controller.collectNearestSample();
+    _controller.startCollectionProcess();
   }
 
   void _openBag() {
@@ -246,6 +250,24 @@ class _Screen08PlanetaryExplorationState
   }
 
   void _finishMissionAndReturn() {
+    if (!_controller.canCompleteMission()) {
+      AudioService.instance.playScan();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AstroviaTheme.panel,
+          content: Text(
+            "CANNOT FINISH: COMPLETE ALL REQUIRED OBJECTIVES & SECURE SAMPLES IN LANDER VAULT FIRST!",
+            style: AstroviaTheme.orbitron(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: AstroviaTheme.gold,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
     AudioService.instance.playSuccess();
     Navigator.pushReplacement(
       context,
@@ -261,6 +283,10 @@ class _Screen08PlanetaryExplorationState
   Widget build(BuildContext context) {
     final state = MissionState.instance;
     final mission = _controller.mission;
+    final isOrbitalMode = mission.gameplayMode == MissionGameplayMode.orbitalFlight ||
+        mission.gameplayMode == MissionGameplayMode.orbitalDeployment ||
+        mission.gameplayMode == MissionGameplayMode.zeroGravityEva ||
+        mission.gameplayMode == MissionGameplayMode.roboticConsole;
 
     return KeyboardListener(
       focusNode: _focusNode,
@@ -268,13 +294,16 @@ class _Screen08PlanetaryExplorationState
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         backgroundColor: AstroviaTheme.darkSpace,
-        body: AstroviaVideoBackground(
-          videoAsset: mission.defaultVideoAsset,
-          overlayOpacity: 0.35,
+        body: PlanetaryEnvironmentWidget(
+          planetaryData: mission.planetaryData,
+          levelNumber: mission.levelNumber,
+          isOrbital: isOrbitalMode,
+          cameraOffset: _controller.playerWorldPos,
+          animationTime: DateTime.now().millisecondsSinceEpoch / 1000.0,
           child: SafeArea(
             child: Stack(
               children: [
-                // 1. World Layer: Interactable Entities & Samples
+                // 1. World Layer: Interactable Entities & Spacecraft
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (ctx, child) {
@@ -284,14 +313,14 @@ class _Screen08PlanetaryExplorationState
 
                     return Stack(
                       children: [
-                        // Lander Spacecraft in the world
+                        // Lander Spacecraft in the world (with animated hatch and ladder)
                         Positioned(
                           left: screenCenter.dx +
                               (_controller.landerWorldPos.dx - pPos.dx) -
-                              50,
+                              75,
                           top: screenCenter.dy +
                               (_controller.landerWorldPos.dy - pPos.dy) -
-                              80,
+                              115,
                           child: _buildLanderWorldObject(),
                         ),
 
@@ -323,8 +352,8 @@ class _Screen08PlanetaryExplorationState
                               _controller.nearestEntity?.id == entity.id;
 
                           return Positioned(
-                            left: screenPos.dx - 25,
-                            top: screenPos.dy - 25,
+                            left: screenPos.dx - 35,
+                            top: screenPos.dy - 35,
                             child: _buildWorldEntityWidget(
                                 entity, isTargetNear),
                           );
@@ -344,7 +373,7 @@ class _Screen08PlanetaryExplorationState
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Astronaut callsig tag
+                            // Astronaut callsign tag
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
@@ -384,7 +413,7 @@ class _Screen08PlanetaryExplorationState
                   ),
                 ),
 
-                // 3. Proximity Action Prompt (when near interactable object)
+                // 3. Proximity Action Prompt
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (ctx, child) {
@@ -434,9 +463,57 @@ class _Screen08PlanetaryExplorationState
                   },
                 ),
 
-                // 4. Top HUD Status Bar
+                // 4. Collection In-Progress Action Banner
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (ctx, child) {
+                    if (!_controller.isBusyCollecting) return const SizedBox.shrink();
+                    return Positioned(
+                      bottom: 95,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          width: 320,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AstroviaTheme.panel,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AstroviaTheme.gold, width: 1.5),
+                            boxShadow: AstroviaTheme.goldGlowShadow,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _controller.currentActionName,
+                                style: AstroviaTheme.orbitron(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AstroviaTheme.gold,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: LinearProgressIndicator(
+                                  value: _controller.actionProgress.clamp(0.0, 1.0),
+                                  minHeight: 6,
+                                  backgroundColor: AstroviaTheme.darkSpace,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(AstroviaTheme.gold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // 5. Top Bar: Level, Alert, Consumables & Icons
                 Positioned(
-                  top: 12,
+                  top: 10,
                   left: 20,
                   right: 20,
                   child: AnimatedBuilder(
@@ -444,7 +521,7 @@ class _Screen08PlanetaryExplorationState
                     builder: (ctx, child) {
                       return Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                            horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
                           color: AstroviaTheme.panelTranslucent,
                           borderRadius: BorderRadius.circular(8),
@@ -504,7 +581,29 @@ class _Screen08PlanetaryExplorationState
                   ),
                 ),
 
-                // 5. Ready to Transmit / Return Button (when objectives complete)
+                // 6. Persistent Objectives Checklist Panel (Top Left)
+                Positioned(
+                  top: 72,
+                  left: 20,
+                  child: AnimatedBuilder(
+                    animation: state,
+                    builder: (ctx, child) =>
+                        _buildObjectiveChecklistPanel(mission, state),
+                  ),
+                ),
+
+                // 7. Compact Collected-Items Panel (Top Right)
+                Positioned(
+                  top: 72,
+                  right: 20,
+                  child: AnimatedBuilder(
+                    animation: state,
+                    builder: (ctx, child) =>
+                        _buildCompactCollectedItemsPanel(state),
+                  ),
+                ),
+
+                // 8. Mission Completion Return Button
                 AnimatedBuilder(
                   animation: state,
                   builder: (ctx, child) {
@@ -512,7 +611,7 @@ class _Screen08PlanetaryExplorationState
                       return const SizedBox.shrink();
                     }
                     return Positioned(
-                      top: 128,
+                      bottom: 84,
                       right: 20,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
@@ -521,12 +620,12 @@ class _Screen08PlanetaryExplorationState
                           side: const BorderSide(
                               color: AstroviaTheme.green, width: 1.5),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
+                              horizontal: 16, vertical: 12),
                         ),
                         icon: const Icon(Icons.rocket_rounded,
                             color: AstroviaTheme.green),
                         label: Text(
-                          "ALL OBJECTIVES COMPLETE ► RETURN / SECURE",
+                          "ALL OBJECTIVES MET ► ASCENT / RETURN",
                           style: AstroviaTheme.orbitron(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -539,14 +638,14 @@ class _Screen08PlanetaryExplorationState
                   },
                 ),
 
-                // 6. Bottom Left: Touch Virtual Joystick
+                // 9. Bottom Left: Touch Virtual Joystick
                 Positioned(
                   bottom: 16,
                   left: 20,
                   child: _buildVirtualJoystick(),
                 ),
 
-                // 7. Bottom Right: Action Touch Buttons (Interact, Collect, Jump, Bag)
+                // 10. Bottom Right: Action Touch Buttons
                 Positioned(
                   bottom: 16,
                   right: 20,
@@ -579,6 +678,173 @@ class _Screen08PlanetaryExplorationState
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildObjectiveChecklistPanel(MissionModel mission, MissionState state) {
+    return Container(
+      width: 250,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AstroviaTheme.panelTranslucent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AstroviaTheme.cyan.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.assignment_turned_in_rounded, size: 14, color: AstroviaTheme.cyan),
+              const SizedBox(width: 6),
+              Text(
+                "MISSION OBJECTIVES",
+                style: AstroviaTheme.orbitron(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: AstroviaTheme.cyan,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...mission.objectives.map((obj) {
+            final isDone = state.isObjectiveCompleted(obj.key);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isDone ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                    size: 14,
+                    color: isDone ? AstroviaTheme.green : AstroviaTheme.secondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      obj.description,
+                      style: AstroviaTheme.rajdhani(
+                        fontSize: 10,
+                        color: isDone ? AstroviaTheme.white : AstroviaTheme.secondary,
+                        fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactCollectedItemsPanel(MissionState state) {
+    final bag = state.bag;
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AstroviaTheme.panelTranslucent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AstroviaTheme.gold.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.backpack_rounded, size: 14, color: AstroviaTheme.gold),
+                  const SizedBox(width: 6),
+                  Text(
+                    "SAMPLE BAG",
+                    style: AstroviaTheme.orbitron(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AstroviaTheme.gold,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                "${bag.currentMassKg.toStringAsFixed(1)} / ${bag.maxCapacityKg.toStringAsFixed(0)} kg",
+                style: AstroviaTheme.orbitron(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: bag.isFull ? AstroviaTheme.red : AstroviaTheme.gold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: bag.capacityFraction,
+              minHeight: 4,
+              backgroundColor: AstroviaTheme.darkSpace,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                bag.isFull ? AstroviaTheme.red : AstroviaTheme.gold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (bag.items.isEmpty)
+            Text(
+              "No samples in suit bag. Approach targets and press [F].",
+              style: AstroviaTheme.rajdhani(
+                fontSize: 10,
+                color: AstroviaTheme.secondary,
+              ),
+            )
+          else
+            ...bag.items.map((item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1.5),
+              child: Row(
+                children: [
+                  const Icon(Icons.terrain_rounded, size: 12, color: AstroviaTheme.cyan),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: AstroviaTheme.rajdhani(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AstroviaTheme.white,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    "${item.massKg}kg",
+                    style: AstroviaTheme.orbitron(
+                      fontSize: 9,
+                      color: AstroviaTheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          const SizedBox(height: 4),
+          GestureDetector(
+            onTap: _openBag,
+            child: Text(
+              "INSPECT FULL INVENTORY ►",
+              style: AstroviaTheme.orbitron(
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+                color: AstroviaTheme.cyan,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -702,6 +968,7 @@ class _Screen08PlanetaryExplorationState
   }
 
   Widget _buildLanderWorldObject() {
+    final mission = _controller.mission;
     return Column(
       children: [
         Container(
@@ -709,30 +976,31 @@ class _Screen08PlanetaryExplorationState
           decoration: BoxDecoration(
             color: AstroviaTheme.panelGlass,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: AstroviaTheme.cyan),
+            border: Border.all(
+                color: _controller.isLanderHatchOpen
+                    ? AstroviaTheme.green
+                    : AstroviaTheme.cyan),
           ),
           child: Text(
-            "LANDER AIRLOCK",
+            _controller.isLanderHatchOpen
+                ? "HATCH: OPEN • [E] TRANSFER / INGRESS"
+                : "HATCH: SEALED • [E] OPEN HATCH",
             style: AstroviaTheme.orbitron(
               fontSize: 9,
               fontWeight: FontWeight.bold,
-              color: AstroviaTheme.cyan,
+              color: _controller.isLanderHatchOpen
+                  ? AstroviaTheme.green
+                  : AstroviaTheme.cyan,
             ),
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          width: 80,
-          height: 100,
-          decoration: BoxDecoration(
-            color: const Color(0xFFCFD8DC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF37474F), width: 2),
-          ),
-          child: const Center(
-            child: Icon(Icons.rocket_rounded,
-                size: 48, color: Color(0xFF37474F)),
-          ),
+        SpacecraftWidget(
+          buildData: MissionState.instance.activeSpacecraft,
+          missionLevel: mission.levelNumber,
+          hatchOpen: _controller.isLanderHatchOpen,
+          landingLegsExtended: true,
+          scale: 0.95,
         ),
       ],
     );

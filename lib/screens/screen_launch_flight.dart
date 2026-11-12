@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../controllers/flight_physics_controller.dart';
 import '../models/mission_model.dart';
+import '../rendering/planetary_environment_renderer.dart';
 import '../rendering/spacecraft_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
-import '../widgets/astrovia_video_background.dart';
 import 'screen_08_planetary_exploration.dart';
 import 'screen_10_mission_results.dart';
 
@@ -277,11 +277,19 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
   Widget build(BuildContext context) {
     final telem = _flightController.telemetry;
 
+    final isOrbitalMode = widget.mission.gameplayMode == MissionGameplayMode.orbitalFlight ||
+        widget.mission.gameplayMode == MissionGameplayMode.orbitalDeployment ||
+        widget.mission.gameplayMode == MissionGameplayMode.zeroGravityEva ||
+        widget.mission.gameplayMode == MissionGameplayMode.roboticConsole;
+
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
-      body: AstroviaVideoBackground(
-        videoAsset: widget.mission.defaultVideoAsset,
-        overlayOpacity: 0.40,
+      body: PlanetaryEnvironmentWidget(
+        planetaryData: widget.mission.planetaryData,
+        levelNumber: widget.mission.levelNumber,
+        isOrbital: isOrbitalMode,
+        cameraOffset: Offset(telem.horizontalSpeedMs * 2.0, -telem.verticalSpeedMs),
+        animationTime: DateTime.now().millisecondsSinceEpoch / 1000.0,
         child: SafeArea(
           child: Stack(
             children: [
@@ -299,6 +307,7 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
                           isRcsFiring: telem.isRcsFiring,
                           landingLegsExtended: telem.landingGearExtended,
                           scale: 1.1,
+                          missionLevel: widget.mission.levelNumber,
                         ),
                       );
                     },
@@ -618,3 +627,4 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
     );
   }
 }
+

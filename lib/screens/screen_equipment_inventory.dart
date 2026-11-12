@@ -415,3 +415,4 @@ class _ScreenEquipmentInventoryState extends State<ScreenEquipmentInventory> {
     );
   }
 }
+

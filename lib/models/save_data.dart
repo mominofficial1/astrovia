@@ -93,7 +93,12 @@ class AstraviaSaveData {
   bool isCampaignCompleted;
   Map<int, LevelProgressRecord> levelRecords;
   List<String> ownedSuitIds;
+  List<String> ownedVisorIds;
+  List<String> ownedBackpackIds;
+  List<String> ownedBootsIds;
+  List<String> ownedColorways;
   List<String> ownedPatches;
+  List<String> ownedLiveries;
   List<SpacecraftBuild> savedSpacecraftBuilds;
   String activeSpacecraftBuildName;
   List<InventoryItem> persistentInventory;
@@ -109,7 +114,12 @@ class AstraviaSaveData {
     this.isCampaignCompleted = false,
     Map<int, LevelProgressRecord>? levelRecords,
     List<String>? ownedSuitIds,
+    List<String>? ownedVisorIds,
+    List<String>? ownedBackpackIds,
+    List<String>? ownedBootsIds,
+    List<String>? ownedColorways,
     List<String>? ownedPatches,
+    List<String>? ownedLiveries,
     List<SpacecraftBuild>? savedSpacecraftBuilds,
     this.activeSpacecraftBuildName = "Saturn V / CSM Apollo",
     List<InventoryItem>? persistentInventory,
@@ -118,7 +128,12 @@ class AstraviaSaveData {
   })  : playerProfile = playerProfile ?? AstronautProfile(),
         levelRecords = levelRecords ?? {1: const LevelProgressRecord(levelNumber: 1)},
         ownedSuitIds = ownedSuitIds ?? ["explorer"],
+        ownedVisorIds = ownedVisorIds ?? ["gold"],
+        ownedBackpackIds = ownedBackpackIds ?? ["plss_compact"],
+        ownedBootsIds = ownedBootsIds ?? ["lunar_tread"],
+        ownedColorways = ownedColorways ?? ["white"],
         ownedPatches = ownedPatches ?? ["spaceapps2026", "apollo11"],
+        ownedLiveries = ownedLiveries ?? ["apollo_white"],
         savedSpacecraftBuilds = savedSpacecraftBuilds ?? [
           SpacecraftBuild.starterApollo,
           SpacecraftBuild.starterLunarLander,
@@ -170,7 +185,12 @@ class AstraviaSaveData {
         'isCampaignCompleted': isCampaignCompleted,
         'levelRecords': levelRecords.map((k, v) => MapEntry(k.toString(), v.toJson())),
         'ownedSuitIds': ownedSuitIds,
+        'ownedVisorIds': ownedVisorIds,
+        'ownedBackpackIds': ownedBackpackIds,
+        'ownedBootsIds': ownedBootsIds,
+        'ownedColorways': ownedColorways,
         'ownedPatches': ownedPatches,
+        'ownedLiveries': ownedLiveries,
         'savedSpacecraftBuilds': savedSpacecraftBuilds.map((b) => b.toJson()).toList(),
         'activeSpacecraftBuildName': activeSpacecraftBuildName,
         'persistentInventory': persistentInventory.map((i) => i.toJson()).toList(),
@@ -214,7 +234,12 @@ class AstraviaSaveData {
       isCampaignCompleted: json['isCampaignCompleted'] as bool? ?? false,
       levelRecords: parsedRecords,
       ownedSuitIds: (json['ownedSuitIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      ownedVisorIds: (json['ownedVisorIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      ownedBackpackIds: (json['ownedBackpackIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      ownedBootsIds: (json['ownedBootsIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      ownedColorways: (json['ownedColorways'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
       ownedPatches: (json['ownedPatches'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      ownedLiveries: (json['ownedLiveries'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
       savedSpacecraftBuilds: parsedBuilds,
       activeSpacecraftBuildName: json['activeSpacecraftBuildName'] as String? ?? "Saturn V / CSM Apollo",
       persistentInventory: parsedInv,
@@ -225,3 +250,4 @@ class AstraviaSaveData {
     );
   }
 }
+

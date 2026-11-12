@@ -57,6 +57,7 @@ class InventoryBag {
 
   double get currentMassKg => items.fold(0.0, (acc, item) => acc + item.massKg);
   double get remainingCapacityKg => (maxCapacityKg - currentMassKg).clamp(0.0, maxCapacityKg);
+  double get capacityFraction => maxCapacityKg > 0 ? (currentMassKg / maxCapacityKg).clamp(0.0, 1.0) : 0.0;
   bool get isFull => currentMassKg >= maxCapacityKg;
 
   bool canAddItem(InventoryItem item) {
@@ -102,3 +103,4 @@ class InventoryBag {
             .toList(),
       );
 }
+
