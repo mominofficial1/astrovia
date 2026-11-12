@@ -264,13 +264,44 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Official ASTRAVIA Insignia Emblem
+                    FadeTransition(
+                      opacity: _titleOpacity,
+                      child: Container(
+                        width: 140,
+                        height: 140,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: AstroviaTheme.cyan.withValues(alpha: 0.45),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AstroviaTheme.cyan.withValues(alpha: 0.25),
+                              blurRadius: 30,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Image.asset(
+                            'assets/images/astravia_logo.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+
                     // ASTRAVIA Title
                     FadeTransition(
                       opacity: _titleOpacity,
                       child: Text(
                         "ASTRAVIA",
                         style: AstroviaTheme.orbitron(
-                          fontSize: 48,
+                          fontSize: 42,
                           fontWeight: FontWeight.w900,
                           color: AstroviaTheme.white,
                           letterSpacing: 6.0,
@@ -285,14 +316,14 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
                       child: Text(
                         "THE JOURNEY THROUGH SPACE",
                         style: AstroviaTheme.rajdhani(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: AstroviaTheme.cyan,
                           letterSpacing: 4.0,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
                     // Enter Mission Control / First-time Launch Button
                     SlideTransition(

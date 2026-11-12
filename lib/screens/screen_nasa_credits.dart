@@ -31,13 +31,36 @@ class _ScreenNasaCreditsState extends State<ScreenNasaCredits> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: AstroviaTheme.cyan),
-                    onPressed: () {
-                      AudioService.instance.playClick();
-                      Navigator.pop(context);
-                    },
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                            color: AstroviaTheme.cyan),
+                        onPressed: () {
+                          AudioService.instance.playClick();
+                          Navigator.pop(context);
+                        },
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AstroviaTheme.cyan.withValues(alpha: 0.4),
+                            width: 1.0,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(7),
+                          child: Image.asset(
+                            'assets/images/astravia_logo.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   Column(
                     children: [

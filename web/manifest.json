@@ -1,12 +1,12 @@
 {
-    "name": "astrovia",
-    "short_name": "astrovia",
+    "name": "ASTRAVIA: The Journey Through Space",
+    "short_name": "ASTRAVIA",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#02050A",
+    "theme_color": "#19D9FF",
+    "description": "ASTRAVIA: The Journey Through Space — NASA International Space Apps Challenge 2026",
+    "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [
         {

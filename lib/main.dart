@@ -64,7 +64,7 @@ class AstroviaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ASTRAVIA — THE JOURNEY THROUGH SPACE',
+      title: 'ASTRAVIA \u2014 THE JOURNEY THROUGH SPACE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

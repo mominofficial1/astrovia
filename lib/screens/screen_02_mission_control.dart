@@ -317,22 +317,32 @@ class _Screen02MissionControlState extends State<Screen02MissionControl> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left: ASTROVIA BRAND & Tagline
+          // Left: ASTRAVIA BRAND & Tagline
           Row(
             children: [
               Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: AstroviaTheme.cyan,
-                  shape: BoxShape.circle,
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: AstroviaTheme.cyan.withValues(alpha: 0.5),
+                    width: 1.2,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: AstroviaTheme.cyan,
-                      blurRadius: 8,
-                      spreadRadius: 2,
+                      color: AstroviaTheme.cyan.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      spreadRadius: 1,
                     ),
                   ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/astravia_logo.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
