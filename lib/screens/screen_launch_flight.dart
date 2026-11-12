@@ -94,8 +94,13 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
 
   void _onSafeTouchdown() {
     AudioService.instance.playSuccess();
+    MissionState.instance.setMissionPhase(MissionPhase.landed);
+    MissionState.instance.setControlMode(ControlMode.spacecraft);
+    MissionState.instance.completeObjective("apollo11_landing");
     MissionState.instance.completeObjective("soft_landing");
     MissionState.instance.completeObjective("precision_touchdown");
+    MissionState.instance.completeObjective("lunar_landing");
+    MissionState.instance.completeObjective("taurus_landing");
     MissionState.instance.completeObjective("martian_edl_landing");
     MissionState.instance.completeObjective("rendezvous_berth");
     MissionState.instance.completeObjective("docking_capture");
@@ -147,7 +152,7 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
                 icon: const Icon(Icons.sensor_door_rounded,
                     color: AstroviaTheme.cyan),
                 label: Text(
-                  "OPEN AIRLOCK & EGRESS ASTRONAUT",
+                  "ENTER SURFACE EXPLORATION (EVA)",
                   style: AstroviaTheme.orbitron(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -156,11 +161,7 @@ class _ScreenLaunchFlightState extends State<ScreenLaunchFlight> {
                 ),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  MissionState.instance.completeObjective("open_hatch_exit");
-                  MissionState.instance.completeObjective("airlock_depress_eva");
-                  MissionState.instance.completeObjective("astronaut_egress_mars");
-                  MissionState.instance.completeObjective("exit_assembly_eva");
-
+                  // Player operates airlock and egress in real-time exploration scene
                   Navigator.pushReplacement(
                     context,
                     PageRouteBuilder(

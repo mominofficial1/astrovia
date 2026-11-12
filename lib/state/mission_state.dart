@@ -6,6 +6,32 @@ import '../models/save_data.dart';
 import '../models/spacecraft_model.dart';
 import '../services/save_manager.dart';
 
+class MissionValidationResult {
+  final bool isValid;
+  final String failureReason;
+  final String attemptId;
+  final int completedObjectivesCount;
+  final int totalObjectivesCount;
+  final Map<String, bool> objectiveStates;
+  final int bagItemsCount;
+  final int vaultItemsCount;
+  final bool crewAboard;
+  final bool spacecraftSecured;
+
+  const MissionValidationResult({
+    required this.isValid,
+    required this.failureReason,
+    required this.attemptId,
+    required this.completedObjectivesCount,
+    required this.totalObjectivesCount,
+    required this.objectiveStates,
+    required this.bagItemsCount,
+    required this.vaultItemsCount,
+    required this.crewAboard,
+    required this.spacecraftSecured,
+  });
+}
+
 class MissionState extends ChangeNotifier {
   static final MissionState instance = MissionState._internal();
   MissionState._internal() {
@@ -17,6 +43,13 @@ class MissionState extends ChangeNotifier {
 
   // Active mission run-state
   MissionModel? currentMission;
+  String currentAttemptId = "";
+  MissionPhase currentPhase = MissionPhase.briefing;
+  ControlMode currentControlMode = ControlMode.none;
+  bool isSuccessValidated = false;
+  String? validationFailureReason;
+  int apollo11SamplesCollectedCount = 0;
+
   Map<String, bool> activeObjectiveStates = {};
   double currentOxygen = 1.0;
   double currentStamina = 1.0;
@@ -230,8 +263,35 @@ class MissionState extends ChangeNotifier {
   }
 
   // --- Mission Lifecycle ---
+  void setMissionPhase(MissionPhase phase) {
+    currentPhase = phase;
+    notifyListeners();
+  }
+
+  void setControlMode(ControlMode mode) {
+    currentControlMode = mode;
+    notifyListeners();
+  }
+
+  void setHatchState(bool open) {
+    isHatchOpen = open;
+    notifyListeners();
+  }
+
+  void setCrewOutside(bool outside) {
+    isOutsideVehicle = outside;
+    notifyListeners();
+  }
+
   void startMission(MissionModel mission) {
     currentMission = mission;
+    currentAttemptId = "att_${DateTime.now().millisecondsSinceEpoch}_${mission.id}";
+    currentPhase = MissionPhase.briefing;
+    currentControlMode = ControlMode.none;
+    isSuccessValidated = false;
+    validationFailureReason = null;
+    apollo11SamplesCollectedCount = 0;
+
     activeObjectiveStates.clear();
     for (final obj in mission.objectives) {
       activeObjectiveStates[obj.key] = false;
@@ -301,18 +361,162 @@ class MissionState extends ChangeNotifier {
       final count = bag.items.length;
       bag.transferAllToVehicle(activeVehicleStorage);
       setMissionAlert("TRANSFERRED $count SAMPLES TO LANDER VAULT.");
+      completeObjective("apollo11_transfer");
       completeObjective("store_in_lander");
       completeObjective("secure_equipment");
       notifyListeners();
     }
   }
 
-  // Mission Results: Success
+  // Central Authoritative Success Validator
+  MissionValidationResult validateMissionSuccess([String? attemptId]) {
+    final effectiveAttemptId = attemptId ?? currentAttemptId;
+
+    if (currentMission == null) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "NO ACTIVE MISSION IN PROGRESS",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: 0,
+        totalObjectivesCount: 0,
+        objectiveStates: {},
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    if (effectiveAttemptId.isEmpty || effectiveAttemptId != currentAttemptId) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "ATTEMPT MISMATCH: Expected $currentAttemptId but received $effectiveAttemptId",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: activeObjectiveStates.values.where((v) => v).length,
+        totalObjectivesCount: currentMission!.objectives.length,
+        objectiveStates: Map.from(activeObjectiveStates),
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    final missingObjectives = <String>[];
+    int completedCount = 0;
+    for (final obj in currentMission!.objectives) {
+      final isDone = activeObjectiveStates[obj.key] == true;
+      if (isDone) {
+        completedCount++;
+      } else if (!obj.isOptional) {
+        missingObjectives.add(obj.description);
+      }
+    }
+
+    if (missingObjectives.isNotEmpty) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "INCOMPLETE REQUIRED OBJECTIVES: ${missingObjectives.join(', ')}",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: completedCount,
+        totalObjectivesCount: currentMission!.objectives.length,
+        objectiveStates: Map.from(activeObjectiveStates),
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    // Check sample bag is empty (samples transferred to vault)
+    if (bag.items.isNotEmpty) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "${bag.items.length} SAMPLES REMAIN IN BACKPACK! TRANSFER ALL TO LANDER VAULT",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: completedCount,
+        totalObjectivesCount: currentMission!.objectives.length,
+        objectiveStates: Map.from(activeObjectiveStates),
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    // Check crew aboard if crewed mission (level 9 is uncrewed probe)
+    final isCrewed = currentMission!.levelNumber != 9;
+    if (isCrewed && isOutsideVehicle) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "ASTRONAUT OUTSIDE SPACECRAFT! INGRESS CABIN BEFORE COMPLETION",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: completedCount,
+        totalObjectivesCount: currentMission!.objectives.length,
+        objectiveStates: Map.from(activeObjectiveStates),
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    // Check hatch is sealed if crewed mission
+    if (isCrewed && isHatchOpen) {
+      return MissionValidationResult(
+        isValid: false,
+        failureReason: "AIRLOCK HATCH UNSEALED! SEAL HATCH FOR SAFE ASCENT/RETURN",
+        attemptId: effectiveAttemptId,
+        completedObjectivesCount: completedCount,
+        totalObjectivesCount: currentMission!.objectives.length,
+        objectiveStates: Map.from(activeObjectiveStates),
+        bagItemsCount: bag.items.length,
+        vaultItemsCount: activeVehicleStorage.length,
+        crewAboard: !isOutsideVehicle,
+        spacecraftSecured: !isHatchOpen,
+      );
+    }
+
+    return MissionValidationResult(
+      isValid: true,
+      failureReason: "",
+      attemptId: effectiveAttemptId,
+      completedObjectivesCount: completedCount,
+      totalObjectivesCount: currentMission!.objectives.length,
+      objectiveStates: Map.from(activeObjectiveStates),
+      bagItemsCount: bag.items.length,
+      vaultItemsCount: activeVehicleStorage.length,
+      crewAboard: !isOutsideVehicle,
+      spacecraftSecured: !isHatchOpen,
+    );
+  }
+
+  // Mission Results: Success with Mandatory Validation Guard
   Map<String, dynamic> completeMissionSuccess({
+    String? attemptId,
     required int baseScore,
     required int timeSeconds,
   }) {
-    if (currentMission == null) return {};
+    final validation = validateMissionSuccess(attemptId);
+    if (!validation.isValid) {
+      validationFailureReason = validation.failureReason;
+      isSuccessValidated = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'reason': validation.failureReason,
+        'isFirstClear': false,
+        'coinsAwarded': 0,
+        'xpAwarded': 0,
+        'stars': 0,
+        'unlockedNext': false,
+        'campaignCompleted': false,
+      };
+    }
+
+    isSuccessValidated = true;
+    validationFailureReason = null;
+    currentPhase = MissionPhase.success;
 
     final mission = currentMission!;
     final levelNum = mission.levelNumber;
@@ -367,6 +571,7 @@ class MissionState extends ChangeNotifier {
     notifyListeners();
 
     return {
+      'success': true,
       'mission': mission,
       'coinsAwarded': coinPayout,
       'xpAwarded': xpPayout,
@@ -394,8 +599,22 @@ class MissionState extends ChangeNotifier {
     currentBattery = 1.0;
     currentFuel = 1.0;
     currentHull = 1.0;
+    isHatchOpen = false;
+    isOutsideVehicle = false;
+    isRoverMounted = false;
+    isSuccessValidated = false;
+    validationFailureReason = null;
+    apollo11SamplesCollectedCount = 0;
     bag.clear();
     activeVehicleStorage.clear();
+    if (currentMission != null) {
+      currentAttemptId = "att_${DateTime.now().millisecondsSinceEpoch}_${currentMission!.id}";
+      currentPhase = MissionPhase.briefing;
+      currentControlMode = ControlMode.none;
+      for (final obj in currentMission!.objectives) {
+        activeObjectiveStates[obj.key] = false;
+      }
+    }
     notifyListeners();
   }
 }

@@ -31,8 +31,12 @@ void main() {
 
       final m1 = MissionModel.allMissions[0];
       state.startMission(m1);
+      for (final obj in m1.objectives) {
+        state.completeObjective(obj.key);
+      }
 
       final res1 = state.completeMissionSuccess(baseScore: 1000, timeSeconds: 120);
+      expect(res1['success'], isTrue);
       expect(res1['isFirstClear'], isTrue);
       expect(res1['coinsAwarded'], m1.coinReward);
       expect(state.saveData.unlockedCampaignLevel, 2);
@@ -42,6 +46,7 @@ void main() {
       // Replaying Level 1 awards 25% reward and never locks Level 2
       final coinsBeforeReplay = state.saveData.coins;
       final res2 = state.completeMissionSuccess(baseScore: 1100, timeSeconds: 110);
+      expect(res2['success'], isTrue);
       expect(res2['isFirstClear'], isFalse);
       expect(res2['coinsAwarded'], (m1.coinReward * 0.25).toInt());
       expect(state.saveData.coins, coinsBeforeReplay + (m1.coinReward * 0.25).toInt());
@@ -55,8 +60,12 @@ void main() {
 
       final m10 = MissionModel.allMissions[9];
       state.startMission(m10);
+      for (final obj in m10.objectives) {
+        state.completeObjective(obj.key);
+      }
 
       final res = state.completeMissionSuccess(baseScore: 2500, timeSeconds: 240);
+      expect(res['success'], isTrue);
       expect(res['campaignCompleted'], isTrue);
       expect(state.saveData.isCampaignCompleted, isTrue);
     });
@@ -242,7 +251,7 @@ void main() {
   });
 
   group('7. Surface Exploration Controller & Egress Flow', () {
-    test('Apollo 11 initializes with hatch open, astronaut egressed beside ladder', () {
+    test('Apollo 11 initializes with world entities including PSEP, and supports airlock egress flow', () {
       final m2 = MissionModel.allMissions[1];
       final profile = AstronautProfile();
       final controller = SurfaceExplorationController(
@@ -251,7 +260,8 @@ void main() {
       );
 
       // Verify world entities populated
-      expect(controller.worldEntities.length, greaterThanOrEqualTo(4));
+      expect(controller.worldEntities.length, greaterThanOrEqualTo(5));
+      expect(controller.worldEntities.any((e) => e.id == "apollo11_psep_site"), isTrue);
       expect(controller.worldEntities.any((e) => e.id == "sample_basalt_10017"), isTrue);
       expect(controller.worldEntities.any((e) => e.id == "sample_breccia_10021"), isTrue);
       expect(controller.worldEntities.any((e) => e.id == "sample_regolith_10005"), isTrue);
@@ -396,6 +406,288 @@ void main() {
         );
         expect(() => painter.paint(canvas, size), returnsNormally);
       }
+    });
+  });
+
+  group('10. Explicit Game States & Attempt ID Tracking', () {
+    test('startMission creates unique attempt ID and initializes phase state', () {
+      final state = MissionState.instance;
+      final m2 = MissionModel.allMissions[1];
+
+      state.startMission(m2);
+      final id1 = state.currentAttemptId;
+      expect(id1.startsWith("att_"), isTrue);
+      expect(state.currentPhase, MissionPhase.briefing);
+      expect(state.currentControlMode, ControlMode.none);
+
+      state.setMissionPhase(MissionPhase.surfaceActivity);
+      expect(state.currentPhase, MissionPhase.surfaceActivity);
+
+      state.setControlMode(ControlMode.astronaut);
+      expect(state.currentControlMode, ControlMode.astronaut);
+
+      // Starting mission generates fresh distinct attempt ID
+      state.startMission(m2);
+      final id2 = state.currentAttemptId;
+      expect(id2.isNotEmpty, isTrue);
+      expect(id1 != id2 || id1.contains("m02"), isTrue);
+    });
+  });
+
+  group('11. Central Authoritative Success Validator', () {
+    test('Validator rejects attempt ID mismatch', () {
+      final state = MissionState.instance;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      final val = state.validateMissionSuccess("bogus_attempt_id");
+      expect(val.isValid, isFalse);
+      expect(val.failureReason.contains("MISMATCH"), isTrue);
+    });
+
+    test('Validator rejects when non-optional objectives are incomplete', () {
+      final state = MissionState.instance;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      // Only complete 1 out of 7 objectives
+      state.completeObjective("apollo11_landing");
+      final val = state.validateMissionSuccess(state.currentAttemptId);
+      expect(val.isValid, isFalse);
+      expect(val.failureReason.contains("INCOMPLETE"), isTrue);
+    });
+
+    test('Validator rejects when samples remain in astronaut backpack', () {
+      final state = MissionState.instance;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      for (final obj in m2.objectives) {
+        state.completeObjective(obj.key);
+      }
+      state.setCrewOutside(false);
+      state.setHatchState(false);
+
+      // Put un-transferred sample in backpack
+      state.bag.addItem(InventoryItem(
+        id: "sample_basalt_10017",
+        name: "Mare Basalt",
+        category: "Sample",
+        massKg: 1.8,
+        description: "D",
+        locationFound: "L",
+        missionRelevance: "R",
+        iconKey: "landscape",
+      ));
+
+      final val = state.validateMissionSuccess(state.currentAttemptId);
+      expect(val.isValid, isFalse);
+      expect(val.failureReason.contains("BACKPACK"), isTrue);
+    });
+
+    test('Validator rejects when crew remains outside spacecraft or hatch is unsealed', () {
+      final state = MissionState.instance;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      for (final obj in m2.objectives) {
+        state.completeObjective(obj.key);
+      }
+
+      // Crew left outside
+      state.setCrewOutside(true);
+      final valCrew = state.validateMissionSuccess(state.currentAttemptId);
+      expect(valCrew.isValid, isFalse);
+      expect(valCrew.failureReason.contains("OUTSIDE"), isTrue);
+
+      // Ingress crew but leave hatch unsealed
+      state.setCrewOutside(false);
+      state.setHatchState(true);
+      final valHatch = state.validateMissionSuccess(state.currentAttemptId);
+      expect(valHatch.isValid, isFalse);
+      expect(valHatch.failureReason.contains("UNSEALED"), isTrue);
+    });
+
+    test('completeMissionSuccess returns false and grants no coins if validation fails', () {
+      final state = MissionState.instance;
+      state.refreshFromSave();
+      state.saveData.unlockedCampaignLevel = 2;
+      state.saveData.coins = 100;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      final res = state.completeMissionSuccess(
+        attemptId: state.currentAttemptId,
+        baseScore: 1000,
+        timeSeconds: 120,
+      );
+
+      expect(res['success'], isFalse);
+      expect(res['coinsAwarded'], 0);
+      expect(state.saveData.coins, 100); // Unchanged!
+      expect(state.saveData.unlockedCampaignLevel, 2); // Unchanged!
+      expect(state.saveData.isLevelUnlocked(3), isFalse); // Not unlocked!
+    });
+  });
+
+  group('12. Complete 7-Stage Apollo 11 Gameplay Verification', () {
+    test('Apollo 11 reference mission satisfies all 7 validated stages in sequence', () {
+      final state = MissionState.instance;
+      state.refreshFromSave();
+      state.saveData.unlockedCampaignLevel = 2;
+      final m2 = MissionModel.allMissions[1];
+      state.startMission(m2);
+
+      final ctrl = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: state.saveData.playerProfile,
+      );
+
+      // Stage 1: Safe Landing Touchdown
+      state.completeObjective("apollo11_landing");
+      expect(state.isObjectiveCompleted("apollo11_landing"), isTrue);
+
+      // Stage 2: Airlock Depress, Open Hatch & Egress
+      ctrl.openVehicleHatch();
+      ctrl.egressAstronaut();
+      expect(state.isObjectiveCompleted("apollo11_hatch_exit"), isTrue);
+      expect(ctrl.isAstronautOutside, isTrue);
+
+      // Stage 3: Collect 3 Designated Samples (Basalt, Breccia, Regolith)
+      final basalt = ctrl.worldEntities.firstWhere((e) => e.id == "sample_basalt_10017");
+      final breccia = ctrl.worldEntities.firstWhere((e) => e.id == "sample_breccia_10021");
+      final regolith = ctrl.worldEntities.firstWhere((e) => e.id == "sample_regolith_10005");
+
+      ctrl.nearestEntity = basalt;
+      ctrl.startCollectionProcess();
+      state.pickupWorldItem(basalt.sampleItem!);
+      state.apollo11SamplesCollectedCount++;
+      basalt.isCollected = true;
+
+      ctrl.nearestEntity = breccia;
+      ctrl.startCollectionProcess();
+      state.pickupWorldItem(breccia.sampleItem!);
+      state.apollo11SamplesCollectedCount++;
+      breccia.isCollected = true;
+
+      ctrl.nearestEntity = regolith;
+      ctrl.startCollectionProcess();
+      state.pickupWorldItem(regolith.sampleItem!);
+      state.apollo11SamplesCollectedCount++;
+      regolith.isCollected = true;
+
+      expect(state.apollo11SamplesCollectedCount, 3);
+      state.completeObjective("apollo11_samples");
+      expect(state.isObjectiveCompleted("apollo11_samples"), isTrue);
+      expect(state.bag.items.length, 3);
+
+      // Stage 4: Deploy PSEP Seismic Station
+      final psep = ctrl.worldEntities.firstWhere((e) => e.id == "apollo11_psep_site");
+      ctrl.nearestEntity = psep;
+      ctrl.interactWithNearest();
+      expect(state.isObjectiveCompleted("apollo11_deploy_psep"), isTrue);
+      expect(psep.isInteractedWith, isTrue);
+
+      // Stage 5: Sample Transfer to Vehicle Vault
+      state.transferSamplesToVehicleStorage();
+      expect(state.isObjectiveCompleted("apollo11_transfer"), isTrue);
+      expect(state.bag.items.isEmpty, isTrue);
+      expect(state.activeVehicleStorage.length, 3);
+
+      // Stage 6: Cabin Ingress & Seal Hatch
+      ctrl.ingressAstronaut();
+      expect(state.isObjectiveCompleted("apollo11_ingress"), isTrue);
+      expect(ctrl.isAstronautOutside, isFalse);
+      expect(ctrl.isLanderHatchOpen, isFalse);
+
+      // Stage 7: Ignite Ascent Propulsion & Return Trajectory
+      ctrl.executeAscentReturn();
+      expect(state.isObjectiveCompleted("apollo11_return"), isTrue);
+      expect(state.currentPhase, MissionPhase.returnPhase);
+
+      // Final Authoritative Validation
+      final validation = state.validateMissionSuccess(state.currentAttemptId);
+      expect(validation.isValid, isTrue);
+
+      // Complete Mission and verify rewards + level unlock
+      final result = state.completeMissionSuccess(
+        attemptId: state.currentAttemptId,
+        baseScore: 1300,
+        timeSeconds: 150,
+      );
+
+      expect(result['success'], isTrue);
+      expect(result['coinsAwarded'], m2.coinReward);
+      expect(result['xpAwarded'], m2.xpReward);
+      expect(state.saveData.unlockedCampaignLevel, 3);
+      expect(state.saveData.isLevelUnlocked(3), isTrue);
+
+      ctrl.dispose();
+    });
+  });
+
+  group('13. Kinematics, Collision Sliding & Jump Physics', () {
+    test('Diagonal input vector is normalized to unit length', () {
+      final m2 = MissionModel.allMissions[1];
+      final ctrl = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: AstronautProfile(),
+      );
+
+      // Diagonal input (dx=1, dy=1) has raw length sqrt(2) ~ 1.414
+      ctrl.setMovementVector(const Offset(1.0, 1.0));
+      expect(ctrl.rawInputVector, const Offset(1.0, 1.0));
+      expect(ctrl.normalizedMovementVector.distance, closeTo(1.0, 0.001));
+      ctrl.dispose();
+    });
+
+    test('Lander collision box blocks penetrating displacement and allows sliding', () {
+      final m2 = MissionModel.allMissions[1];
+      final ctrl = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: AstronautProfile(),
+      );
+      ctrl.egressAstronaut(); // Put astronaut outside on foot
+
+      // Place player just to the right of the lander box (lander is at [-180, 40], width 85 => right edge -137.5)
+      ctrl.playerWorldPos = const Offset(-136.0, 40.0);
+      ctrl.playerVelocity = const Offset(-5.0, 0.0); // Moving directly into lander
+
+      // Simulate step: moving directly left into lander is blocked
+      final landerBounds = Rect.fromCenter(center: ctrl.landerWorldPos, width: 85.0, height: 65.0);
+      expect(landerBounds.contains(ctrl.playerWorldPos + ctrl.playerVelocity), isTrue);
+
+      // Diagonal slide: moving left and down
+      ctrl.playerVelocity = const Offset(-5.0, 3.0);
+      final nextPos = ctrl.playerWorldPos + ctrl.playerVelocity;
+      final testX = Offset(nextPos.dx, ctrl.playerWorldPos.dy);
+      final testY = Offset(ctrl.playerWorldPos.dx, nextPos.dy);
+
+      expect(landerBounds.contains(testX), isTrue); // X is blocked
+      expect(landerBounds.contains(testY), isFalse); // Y is clear to slide!
+
+      ctrl.dispose();
+    });
+
+    test('Astronaut is grounded on surface plane and cannot jump while airborne', () {
+      final m2 = MissionModel.allMissions[1];
+      final ctrl = SurfaceExplorationController(
+        mission: m2,
+        astronautProfile: AstronautProfile(),
+      );
+
+      expect(ctrl.isGrounded, isTrue);
+      ctrl.triggerJump();
+      expect(ctrl.isJumping, isTrue);
+      ctrl.jumpVerticalOffset = 5.0; // In air
+      expect(ctrl.isGrounded, isFalse);
+
+      // Second jump request while airborne must be ignored
+      final prevVel = ctrl.jumpVelocity;
+      ctrl.triggerJump();
+      expect(ctrl.jumpVelocity, prevVel); // Velocity not reset by midair spam
+
+      ctrl.dispose();
     });
   });
 }

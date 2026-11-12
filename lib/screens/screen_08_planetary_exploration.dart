@@ -8,6 +8,7 @@ import '../rendering/spacecraft_renderer.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
+import '../widgets/dev_diagnostics_overlay.dart';
 import 'screen_equipment_inventory.dart';
 import 'screen_10_mission_results.dart';
 
@@ -25,6 +26,8 @@ class _Screen08PlanetaryExplorationState
   Offset _joystickKnob = Offset.zero;
   bool _isPaused = false;
   final FocusNode _focusNode = FocusNode();
+  final Set<LogicalKeyboardKey> _pressedKeys = {};
+  bool _showDevDiagnostics = false;
 
   @override
   void initState() {
@@ -42,9 +45,30 @@ class _Screen08PlanetaryExplorationState
       },
     );
 
-    // Initial state: Hatch open, astronaut ready on surface
-    _controller.isLanderHatchOpen = true;
-    _controller.isAstronautOutside = true;
+    // Initial state: For crewed surface missions, astronaut begins inside cabin with sealed hatch
+    if (mission.levelNumber != 9) {
+      _controller.isLanderHatchOpen = false;
+      _controller.isAstronautOutside = false;
+      MissionState.instance.setHatchState(false);
+      MissionState.instance.setCrewOutside(false);
+      MissionState.instance.setControlMode(ControlMode.spacecraft);
+    } else {
+      _controller.isLanderHatchOpen = false;
+      _controller.isAstronautOutside = false;
+      MissionState.instance.setControlMode(ControlMode.roboticProbe);
+    }
+
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) {
+        _pressedKeys.clear();
+        _controller.setMovementVector(Offset.zero);
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+
     _controller.startExploration();
   }
 
@@ -149,6 +173,14 @@ class _Screen08PlanetaryExplorationState
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.f1 ||
+          event.logicalKey == LogicalKeyboardKey.backquote) {
+        setState(() {
+          _showDevDiagnostics = !_showDevDiagnostics;
+        });
+        return;
+      }
+
       if (event.logicalKey == LogicalKeyboardKey.keyE) {
         _handleInteract();
       } else if (event.logicalKey == LogicalKeyboardKey.keyF) {
@@ -163,29 +195,35 @@ class _Screen08PlanetaryExplorationState
       }
     }
 
+    // Continuous key tracking
+    if (event is KeyDownEvent) {
+      _pressedKeys.add(event.logicalKey);
+    } else if (event is KeyUpEvent) {
+      _pressedKeys.remove(event.logicalKey);
+    }
+
     // Directional keys check
     double dx = 0.0;
     double dy = 0.0;
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    if (keys.contains(LogicalKeyboardKey.keyW) ||
-        keys.contains(LogicalKeyboardKey.arrowUp)) {
+    if (_pressedKeys.contains(LogicalKeyboardKey.keyW) ||
+        _pressedKeys.contains(LogicalKeyboardKey.arrowUp)) {
       dy -= 1.0;
     }
-    if (keys.contains(LogicalKeyboardKey.keyS) ||
-        keys.contains(LogicalKeyboardKey.arrowDown)) {
+    if (_pressedKeys.contains(LogicalKeyboardKey.keyS) ||
+        _pressedKeys.contains(LogicalKeyboardKey.arrowDown)) {
       dy += 1.0;
     }
-    if (keys.contains(LogicalKeyboardKey.keyA) ||
-        keys.contains(LogicalKeyboardKey.arrowLeft)) {
+    if (_pressedKeys.contains(LogicalKeyboardKey.keyA) ||
+        _pressedKeys.contains(LogicalKeyboardKey.arrowLeft)) {
       dx -= 1.0;
     }
-    if (keys.contains(LogicalKeyboardKey.keyD) ||
-        keys.contains(LogicalKeyboardKey.arrowRight)) {
+    if (_pressedKeys.contains(LogicalKeyboardKey.keyD) ||
+        _pressedKeys.contains(LogicalKeyboardKey.arrowRight)) {
       dx += 1.0;
     }
 
-    final isShift = keys.contains(LogicalKeyboardKey.shiftLeft) ||
-        keys.contains(LogicalKeyboardKey.shiftRight);
+    final isShift = _pressedKeys.contains(LogicalKeyboardKey.shiftLeft) ||
+        _pressedKeys.contains(LogicalKeyboardKey.shiftRight);
 
     final dir = (dx != 0.0 || dy != 0.0) ? Offset(dx, dy) : Offset.zero;
     _controller.setMovementVector(dir, running: isShift);
@@ -242,6 +280,7 @@ class _Screen08PlanetaryExplorationState
     setState(() {
       _isPaused = !_isPaused;
       if (_isPaused) {
+        _pressedKeys.clear();
         _controller.stopExploration();
       } else {
         _controller.startExploration();
@@ -250,13 +289,14 @@ class _Screen08PlanetaryExplorationState
   }
 
   void _finishMissionAndReturn() {
-    if (!_controller.canCompleteMission()) {
+    final validation = MissionState.instance.validateMissionSuccess();
+    if (!validation.isValid) {
       AudioService.instance.playScan();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AstroviaTheme.panel,
           content: Text(
-            "CANNOT FINISH: COMPLETE ALL REQUIRED OBJECTIVES & SECURE SAMPLES IN LANDER VAULT FIRST!",
+            "CANNOT FINISH: ${validation.failureReason}",
             style: AstroviaTheme.orbitron(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -265,6 +305,17 @@ class _Screen08PlanetaryExplorationState
           ),
         ),
       );
+      return;
+    }
+
+    final res = MissionState.instance.completeMissionSuccess(
+      attemptId: MissionState.instance.currentAttemptId,
+      baseScore: 1250,
+      timeSeconds: 180,
+    );
+
+    if (res['success'] != true) {
+      AudioService.instance.playScan();
       return;
     }
 
@@ -294,15 +345,18 @@ class _Screen08PlanetaryExplorationState
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         backgroundColor: AstroviaTheme.darkSpace,
-        body: PlanetaryEnvironmentWidget(
-          planetaryData: mission.planetaryData,
-          levelNumber: mission.levelNumber,
-          isOrbital: isOrbitalMode,
-          cameraOffset: _controller.playerWorldPos,
-          animationTime: DateTime.now().millisecondsSinceEpoch / 1000.0,
-          child: SafeArea(
-            child: Stack(
-              children: [
+        body: GestureDetector(
+          onTap: () => _focusNode.requestFocus(),
+          behavior: HitTestBehavior.translucent,
+          child: PlanetaryEnvironmentWidget(
+            planetaryData: mission.planetaryData,
+            levelNumber: mission.levelNumber,
+            isOrbital: isOrbitalMode,
+            cameraOffset: _controller.playerWorldPos,
+            animationTime: DateTime.now().millisecondsSinceEpoch / 1000.0,
+            child: SafeArea(
+              child: Stack(
+                children: [
                 // 1. World Layer: Interactable Entities & Spacecraft
                 AnimatedBuilder(
                   animation: _controller,
@@ -368,6 +422,9 @@ class _Screen08PlanetaryExplorationState
                   child: AnimatedBuilder(
                     animation: _controller,
                     builder: (ctx, child) {
+                      if (!_controller.isAstronautOutside && !_controller.isRoverMounted) {
+                        return const SizedBox.shrink(); // Astronaut is inside spacecraft cabin
+                      }
                       return Transform.translate(
                         offset: Offset(0, -_controller.jumpVerticalOffset),
                         child: Column(
@@ -561,6 +618,20 @@ class _Screen08PlanetaryExplorationState
                                     _controller.stamina, AstroviaTheme.gold),
                                 const SizedBox(width: 14),
                                 IconButton(
+                                  tooltip: "Diagnostics (F1 / `)",
+                                  icon: Icon(
+                                    Icons.terminal_rounded,
+                                    color: _showDevDiagnostics
+                                        ? AstroviaTheme.green
+                                        : AstroviaTheme.gold,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showDevDiagnostics = !_showDevDiagnostics;
+                                    });
+                                  },
+                                ),
+                                IconButton(
                                   tooltip: "Astronaut Bag",
                                   icon: const Icon(Icons.backpack_rounded,
                                       color: AstroviaTheme.cyan),
@@ -674,13 +745,30 @@ class _Screen08PlanetaryExplorationState
                     ],
                   ),
                 ),
+
+                // 11. Dev Diagnostics Overlay
+                if (_showDevDiagnostics)
+                  Positioned(
+                    top: 60,
+                    right: 20,
+                    bottom: 20,
+                    child: DevDiagnosticsOverlay(
+                      controller: _controller,
+                      onClose: () {
+                        setState(() {
+                          _showDevDiagnostics = false;
+                        });
+                      },
+                    ),
+                  ),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildObjectiveChecklistPanel(MissionModel mission, MissionState state) {
     return Container(
@@ -712,6 +800,10 @@ class _Screen08PlanetaryExplorationState
           const SizedBox(height: 6),
           ...mission.objectives.map((obj) {
             final isDone = state.isObjectiveCompleted(obj.key);
+            String desc = obj.description;
+            if (obj.key == "apollo11_samples") {
+              desc = "Collect 3 designated lunar samples (${state.apollo11SamplesCollectedCount.clamp(0, 3)}/3)";
+            }
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2.0),
               child: Row(
@@ -725,7 +817,7 @@ class _Screen08PlanetaryExplorationState
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      obj.description,
+                      desc,
                       style: AstroviaTheme.rajdhani(
                         fontSize: 10,
                         color: isDone ? AstroviaTheme.white : AstroviaTheme.secondary,
@@ -1055,6 +1147,11 @@ class _Screen08PlanetaryExplorationState
 
   Widget _buildWorldEntityWidget(
       InteractableWorldEntity entity, bool isNear) {
+    final bool deployed = entity.isInteractedWith;
+    final Color mainColor = deployed
+        ? AstroviaTheme.green
+        : (isNear ? AstroviaTheme.gold : AstroviaTheme.cyan);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1065,16 +1162,14 @@ class _Screen08PlanetaryExplorationState
                 ? AstroviaTheme.gold.withValues(alpha: 0.3)
                 : AstroviaTheme.panelGlass,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isNear ? AstroviaTheme.gold : AstroviaTheme.cyan,
-            ),
+            border: Border.all(color: mainColor),
           ),
           child: Text(
-            entity.name,
+            deployed ? "[DEPLOYED] ${entity.name}" : entity.name,
             style: AstroviaTheme.rajdhani(
               fontSize: 10,
               fontWeight: FontWeight.bold,
-              color: isNear ? AstroviaTheme.gold : AstroviaTheme.white,
+              color: mainColor,
             ),
           ),
         ),
@@ -1084,21 +1179,21 @@ class _Screen08PlanetaryExplorationState
           height: 38,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isNear
-                ? AstroviaTheme.gold.withValues(alpha: 0.25)
-                : AstroviaTheme.cyan.withValues(alpha: 0.15),
+            color: mainColor.withValues(alpha: 0.2),
             border: Border.all(
-              color: isNear ? AstroviaTheme.gold : AstroviaTheme.cyan,
-              width: isNear ? 2.0 : 1.0,
+              color: mainColor,
+              width: isNear || deployed ? 2.0 : 1.0,
             ),
             boxShadow: isNear ? AstroviaTheme.goldGlowShadow : [],
           ),
           child: Icon(
-            entity.category == "sample"
-                ? Icons.terrain_rounded
-                : Icons.sensors_rounded,
+            deployed
+                ? Icons.check_circle_rounded
+                : (entity.category == "sample"
+                    ? Icons.terrain_rounded
+                    : Icons.sensors_rounded),
             size: 20,
-            color: isNear ? AstroviaTheme.gold : AstroviaTheme.cyan,
+            color: mainColor,
           ),
         ),
       ],

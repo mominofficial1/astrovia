@@ -23,23 +23,28 @@ class _Screen10MissionResultsState extends State<Screen10MissionResults>
   @override
   void initState() {
     super.initState();
-    AudioService.instance.playSuccess();
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..forward();
 
-    // Evaluate mission completion once and award rewards safely
+    // Evaluate mission completion once and award rewards safely with central validator
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_evaluated) {
         _evaluated = true;
         final res = MissionState.instance.completeMissionSuccess(
+          attemptId: MissionState.instance.currentAttemptId,
           baseScore: 1250,
           timeSeconds: 180,
         );
         setState(() {
           _results = res;
         });
+        if (res['success'] == true) {
+          AudioService.instance.playSuccess();
+        } else {
+          AudioService.instance.playScan();
+        }
       }
     });
   }
@@ -102,6 +107,14 @@ class _Screen10MissionResultsState extends State<Screen10MissionResults>
   Widget build(BuildContext context) {
     final state = MissionState.instance;
     final mission = state.currentMission ?? MissionModel.allMissions[0];
+
+    // If validation fails or has incomplete requirements, block false success
+    if (_evaluated && _results['success'] != true) {
+      final reason = _results['reason'] as String? ??
+          "All required objectives and vehicle vault transfers must be complete.";
+      return _buildValidationBlockedView(context, mission, state, reason);
+    }
+
     final coinsAwarded = _results['coinsAwarded'] ?? mission.coinReward;
     final xpAwarded = _results['xpAwarded'] ?? mission.xpReward;
     final stars = _results['stars'] as int? ?? 3;
@@ -456,6 +469,123 @@ class _Screen10MissionResultsState extends State<Screen10MissionResults>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildValidationBlockedView(
+      BuildContext context, MissionModel mission, MissionState state, String reason) {
+    return Scaffold(
+      backgroundColor: AstroviaTheme.darkSpace,
+      body: PlanetaryEnvironmentWidget(
+        planetaryData: mission.planetaryData,
+        levelNumber: mission.levelNumber,
+        isOrbital: true,
+        child: SafeArea(
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
+              constraints: const BoxConstraints(maxWidth: 520),
+              decoration: BoxDecoration(
+                color: AstroviaTheme.panel,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AstroviaTheme.red, width: 2.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: AstroviaTheme.red.withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.block_rounded,
+                      color: AstroviaTheme.red, size: 56),
+                  const SizedBox(height: 12),
+                  Text(
+                    "MISSION COMPLETION REJECTED",
+                    style: AstroviaTheme.orbitron(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AstroviaTheme.red,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Flight Telemetry Validator detected unsatisfied mission objectives:",
+                    textAlign: TextAlign.center,
+                    style: AstroviaTheme.rajdhani(
+                      fontSize: 13,
+                      color: AstroviaTheme.white,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AstroviaTheme.darkSpace,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: AstroviaTheme.red.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      reason,
+                      textAlign: TextAlign.center,
+                      style: AstroviaTheme.rajdhani(
+                        fontSize: 12,
+                        color: AstroviaTheme.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              AstroviaTheme.cyan.withValues(alpha: 0.25),
+                          side: const BorderSide(color: AstroviaTheme.cyan),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 12),
+                        ),
+                        icon: const Icon(Icons.arrow_back_rounded,
+                            color: AstroviaTheme.cyan),
+                        label: Text(
+                          "RETURN TO MISSION",
+                          style: AstroviaTheme.orbitron(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.white,
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 14),
+                      TextButton(
+                        onPressed: _goToMissionMap,
+                        child: Text(
+                          "CAMPAIGN MAP",
+                          style: AstroviaTheme.rajdhani(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.secondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

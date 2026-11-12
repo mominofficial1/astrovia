@@ -37,10 +37,12 @@ class SurfaceExplorationController extends ChangeNotifier {
   final AstronautProfile astronautProfile;
 
   // Spatial coordinates & movement
-  Offset playerWorldPos = const Offset(-140, 0); // Beside lander ladder
-  Offset landerWorldPos = const Offset(-180, 0);
-  Offset roverWorldPos = const Offset(-105, 10);
+  Offset playerWorldPos = const Offset(-140, 45); // Beside lander ladder
+  Offset landerWorldPos = const Offset(-180, 40);
+  Offset roverWorldPos = const Offset(-105, 45);
   Offset playerVelocity = Offset.zero;
+  Offset rawInputVector = Offset.zero;
+  Offset normalizedMovementVector = Offset.zero;
   bool facingRight = true;
   AstronautAnimState animState = AstronautAnimState.idle;
   double animPhase = 0.0;
@@ -48,6 +50,10 @@ class SurfaceExplorationController extends ChangeNotifier {
   bool isJumping = false;
   double jumpVerticalOffset = 0.0;
   double jumpVelocity = 0.0;
+
+  bool get isGrounded => jumpVerticalOffset <= 0.001;
+  MissionPhase get missionPhase => MissionState.instance.currentPhase;
+  ControlMode get controlMode => MissionState.instance.currentControlMode;
 
   // Rover state
   bool isRoverDeployed = false;
@@ -161,10 +167,19 @@ class SurfaceExplorationController extends ChangeNotifier {
         // Apollo 11: First Lunar Steps
         worldEntities.addAll([
           InteractableWorldEntity(
+            id: "apollo11_psep_site",
+            name: "PSEP Seismic Deployment Station",
+            category: "instrument",
+            position: const Offset(90, 80),
+            radius: 65.0,
+            promptText: "Deploy Early Apollo Surface Experiments Package (PSEP)",
+            iconKey: "sensors",
+          ),
+          InteractableWorldEntity(
             id: "sample_basalt_10017",
             name: "Mare Basalt #10017",
             category: "sample",
-            position: const Offset(70, -50),
+            position: const Offset(70, 35),
             promptText: "Collect Mare Basalt Rock",
             iconKey: "terrain",
             sampleItem: InventoryItem(
@@ -182,7 +197,7 @@ class SurfaceExplorationController extends ChangeNotifier {
             id: "sample_breccia_10021",
             name: "Impact Breccia #10021",
             category: "sample",
-            position: const Offset(190, 45),
+            position: const Offset(190, 75),
             promptText: "Collect Breccia Sample",
             iconKey: "terrain",
             sampleItem: InventoryItem(
@@ -612,6 +627,12 @@ class SurfaceExplorationController extends ChangeNotifier {
   }
 
   void startExploration() {
+    MissionState.instance.setMissionPhase(MissionPhase.surfaceActivity);
+    MissionState.instance.setControlMode(
+      isRoverMounted
+          ? ControlMode.rover
+          : (isAstronautOutside ? ControlMode.astronaut : ControlMode.spacecraft),
+    );
     _gameLoopTimer?.cancel();
     _gameLoopTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
       _tick(0.033);
@@ -624,17 +645,23 @@ class SurfaceExplorationController extends ChangeNotifier {
   }
 
   void setMovementVector(Offset dir, {bool running = false}) {
+    rawInputVector = dir;
     if (isBusyCollecting) return; // Locked in collection animation
     isRunning = running;
     if (dir == Offset.zero) {
+      normalizedMovementVector = Offset.zero;
       playerVelocity = Offset.zero;
       animState = isJumping ? AstronautAnimState.jump : AstronautAnimState.idle;
     } else {
+      final len = dir.distance;
+      final normDir = len > 0 ? Offset(dir.dx / len, dir.dy / len) : Offset.zero;
+      normalizedMovementVector = normDir;
+
       final speedMultiplier = isRoverMounted ? 2.8 : (isRunning ? 1.7 : 1.0);
       final baseSpeed = 4.5 * speedMultiplier;
-      playerVelocity = dir * baseSpeed;
-      if (dir.dx > 0) facingRight = true;
-      if (dir.dx < 0) facingRight = false;
+      playerVelocity = normDir * baseSpeed;
+      if (normDir.dx > 0) facingRight = true;
+      if (normDir.dx < 0) facingRight = false;
       animState = isJumping
           ? AstronautAnimState.jump
           : (isRunning ? AstronautAnimState.run : AstronautAnimState.walk);
@@ -643,15 +670,12 @@ class SurfaceExplorationController extends ChangeNotifier {
   }
 
   void triggerJump() {
-    if (isRoverMounted || isBusyCollecting) return;
-    if (!isJumping) {
-      isJumping = true;
-      // Celestial gravity scale: on Moon (1.62 m/s²), jumps are high and floaty
-      final g = mission.planetaryData.surfaceGravity;
-      jumpVelocity = g < 2.0 ? 8.5 : (g < 4.0 ? 6.0 : 4.5);
-      animState = AstronautAnimState.jump;
-      notifyListeners();
-    }
+    if (isRoverMounted || isBusyCollecting || !isGrounded) return;
+    isJumping = true;
+    final g = mission.planetaryData.surfaceGravity;
+    jumpVelocity = g < 2.0 ? 8.5 : (g < 4.0 ? 6.0 : 4.5);
+    animState = AstronautAnimState.jump;
+    notifyListeners();
   }
 
   void _tick(double dt) {
@@ -665,14 +689,36 @@ class SurfaceExplorationController extends ChangeNotifier {
       return;
     }
 
-    // 2. Spatial movement
+    // 2. Spatial movement & collision
     if (playerVelocity != Offset.zero) {
-      playerWorldPos += playerVelocity;
-      // 2000m exploration boundary
-      playerWorldPos = Offset(
-        playerWorldPos.dx.clamp(-400.0, 1600.0),
-        playerWorldPos.dy.clamp(-600.0, 600.0),
+      Offset nextPos = playerWorldPos + playerVelocity;
+      final isSurfaceMission = mission.gameplayMode == MissionGameplayMode.surfaceExploration ||
+          mission.gameplayMode == MissionGameplayMode.roverExpedition;
+      final double minY = isSurfaceMission ? 12.0 : -300.0;
+      final double maxY = isSurfaceMission ? 240.0 : 300.0;
+
+      nextPos = Offset(
+        nextPos.dx.clamp(-350.0, 1500.0),
+        nextPos.dy.clamp(minY, maxY),
       );
+
+      // Collision with lander body when walking on foot
+      if (isSurfaceMission && isAstronautOutside && !isRoverMounted) {
+        final landerBounds = Rect.fromCenter(center: landerWorldPos, width: 85.0, height: 65.0);
+        if (landerBounds.contains(nextPos)) {
+          final testX = Offset(nextPos.dx, playerWorldPos.dy);
+          final testY = Offset(playerWorldPos.dx, nextPos.dy);
+          if (!landerBounds.contains(testX)) {
+            nextPos = testX;
+          } else if (!landerBounds.contains(testY)) {
+            nextPos = testY;
+          } else {
+            nextPos = playerWorldPos; // completely blocked
+          }
+        }
+      }
+
+      playerWorldPos = nextPos;
       animPhase = (animPhase + (isRunning ? 0.08 : 0.05)) % 1.0;
 
       // Oxygen exertion consumption
@@ -702,6 +748,7 @@ class SurfaceExplorationController extends ChangeNotifier {
       jumpVelocity -= (g * 1.5 * dt);
       if (jumpVerticalOffset <= 0.0) {
         jumpVerticalOffset = 0.0;
+        jumpVelocity = 0.0;
         isJumping = false;
         animState = playerVelocity == Offset.zero
             ? AstronautAnimState.idle
@@ -737,7 +784,9 @@ class SurfaceExplorationController extends ChangeNotifier {
   // Handle Hatch Open / Egress / Ingress sequence
   void openVehicleHatch() {
     isLanderHatchOpen = true;
+    MissionState.instance.setHatchState(true);
     onMissionAlert?.call("AIRLOCK EQUALIZED • VEHICLE HATCH OPENED");
+    MissionState.instance.completeObjective("apollo11_hatch_exit");
     MissionState.instance.completeObjective("open_hatch_exit");
     MissionState.instance.completeObjective("airlock_depress_eva");
     MissionState.instance.completeObjective("open_payload_bay");
@@ -746,8 +795,11 @@ class SurfaceExplorationController extends ChangeNotifier {
 
   void egressAstronaut() {
     isAstronautOutside = true;
-    playerWorldPos = Offset(landerWorldPos.dx + 45, landerWorldPos.dy + 15);
+    MissionState.instance.setCrewOutside(true);
+    MissionState.instance.setControlMode(ControlMode.astronaut);
+    playerWorldPos = Offset(landerWorldPos.dx + 48, landerWorldPos.dy + 15);
     onMissionAlert?.call("ASTRONAUT EGRESSED TO SURFACE BESIDE LADDER");
+    MissionState.instance.completeObjective("apollo11_hatch_exit");
     MissionState.instance.completeObjective("open_hatch_exit");
     MissionState.instance.completeObjective("airlock_depress_eva");
     MissionState.instance.completeObjective("exit_assembly_eva");
@@ -763,10 +815,28 @@ class SurfaceExplorationController extends ChangeNotifier {
     }
     isAstronautOutside = false;
     isLanderHatchOpen = false;
+    MissionState.instance.setCrewOutside(false);
+    MissionState.instance.setHatchState(false);
+    MissionState.instance.setControlMode(ControlMode.spacecraft);
+    playerWorldPos = landerWorldPos;
     onMissionAlert?.call("ASTRONAUT INSIDE CABIN • HATCH SEALED");
+    MissionState.instance.completeObjective("apollo11_ingress");
     MissionState.instance.completeObjective("ingress_vehicle");
     MissionState.instance.completeObjective("reenter_airlock");
     MissionState.instance.completeObjective("safe_return");
+    notifyListeners();
+  }
+
+  void executeAscentReturn() {
+    if (isAstronautOutside) {
+      onMissionAlert?.call("CREW MUST INGRESS BEFORE ASCENT RETURN!");
+      return;
+    }
+    MissionState.instance.setMissionPhase(MissionPhase.returnPhase);
+    MissionState.instance.completeObjective("apollo11_return");
+    MissionState.instance.completeObjective("safe_return");
+    MissionState.instance.completeObjective("return_burn");
+    onMissionAlert?.call("ASCENT PROPULSION FIRED • LUNAR ORBIT RETURN CONFIRMED!");
     notifyListeners();
   }
 
@@ -778,25 +848,40 @@ class SurfaceExplorationController extends ChangeNotifier {
     animState = AstronautAnimState.interact;
 
     if (entity.category == "vehicle") {
-      if (!isLanderHatchOpen) {
-        openVehicleHatch();
-      } else {
-        // Transfer all samples in player bag to vehicle storage
-        if (MissionState.instance.bag.items.isNotEmpty) {
-          final count = MissionState.instance.bag.items.length;
-          MissionState.instance.transferSamplesToVehicleStorage();
-          onMissionAlert?.call("TRANSFERRED $count SAMPLES TO LANDER VAULT.");
-          MissionState.instance.completeObjective("store_in_lander");
-          MissionState.instance.completeObjective("secure_equipment");
+      if (isAstronautOutside) {
+        if (!isLanderHatchOpen) {
+          openVehicleHatch();
         } else {
-          // If samples are already transferred, ingress
-          ingressAstronaut();
+          // Transfer all samples in player bag to vehicle storage
+          if (MissionState.instance.bag.items.isNotEmpty) {
+            final count = MissionState.instance.bag.items.length;
+            MissionState.instance.transferSamplesToVehicleStorage();
+            onMissionAlert?.call("TRANSFERRED $count SAMPLES TO LANDER VAULT.");
+            MissionState.instance.completeObjective("apollo11_transfer");
+            MissionState.instance.completeObjective("store_in_lander");
+            MissionState.instance.completeObjective("secure_equipment");
+          } else {
+            // If samples are already transferred, ingress
+            ingressAstronaut();
+          }
+        }
+      } else {
+        // Astronaut inside cabin
+        final allPrimaryDone = MissionState.instance.areAllPrimaryObjectivesCompleted;
+        if (allPrimaryDone) {
+          executeAscentReturn();
+        } else {
+          openVehicleHatch();
+          egressAstronaut();
         }
       }
       notifyListeners();
       return true;
     } else if (entity.category == "rover") {
       isRoverMounted = !isRoverMounted;
+      MissionState.instance.setControlMode(
+        isRoverMounted ? ControlMode.rover : ControlMode.astronaut,
+      );
       onMissionAlert?.call(isRoverMounted
           ? "MOUNTED EXPLORATION ROVER • HIGH-SPEED MOBILITY ACTIVE"
           : "DISMOUNTED ROVER • ASTRONAUT ON FOOT");
@@ -808,6 +893,10 @@ class SurfaceExplorationController extends ChangeNotifier {
 
       // Map verified objectives
       switch (entity.id) {
+        case "apollo11_psep_site":
+          MissionState.instance.completeObjective("apollo11_deploy_psep");
+          onMissionAlert?.call("EARLY APOLLO PSEP SEISMIC PACKAGE DEPLOYED ON LUNAR REGOLITH.");
+          break;
         case "lunar_insertion_node":
           MissionState.instance.completeObjective("lunar_injection");
           onMissionAlert?.call("LUNAR ORBIT INSERTION BURN COMPLETE.");
@@ -953,7 +1042,22 @@ class SurfaceExplorationController extends ChangeNotifier {
           MissionState.instance.completeObjective("collect_breccia");
         } else if (entity.id == "sample_regolith_10005") {
           MissionState.instance.completeObjective("collect_regolith");
-        } else if (entity.id == "surveyor_probe_target") {
+        }
+
+        // Apollo 11 3-sample progress tracking
+        if (entity.id == "sample_basalt_10017" ||
+            entity.id == "sample_breccia_10021" ||
+            entity.id == "sample_regolith_10005") {
+          MissionState.instance.apollo11SamplesCollectedCount++;
+          final c = MissionState.instance.apollo11SamplesCollectedCount;
+          onMissionAlert?.call("APOLLO 11 SAMPLE ACQUIRED ($c/3 DESIGNATED SAMPLES)");
+          if (c >= 3) {
+            MissionState.instance.completeObjective("apollo11_samples");
+            onMissionAlert?.call("ALL 3 SAMPLES COLLECTED (4.8 KG) • RETURN TO LUNAR MODULE VAULT");
+          }
+        }
+
+        if (entity.id == "surveyor_probe_target") {
           MissionState.instance.completeObjective("recover_camera");
         } else if (entity.id == "genesis_rock_15415") {
           MissionState.instance.completeObjective("collect_genesis_rock");
@@ -978,14 +1082,7 @@ class SurfaceExplorationController extends ChangeNotifier {
   }
 
   bool canCompleteMission() {
-    // Check that every non-optional objective is 100% satisfied
-    final objectives = mission.objectives;
-    for (final obj in objectives) {
-      if (!obj.isOptional && !MissionState.instance.isObjectiveCompleted(obj.key)) {
-        return false;
-      }
-    }
-    return true;
+    return MissionState.instance.validateMissionSuccess().isValid;
   }
 
   @override

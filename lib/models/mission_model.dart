@@ -1,5 +1,25 @@
 import 'planetary_data.dart';
 
+enum MissionPhase {
+  briefing,
+  preparation,
+  countdown,
+  flight,
+  landed,
+  surfaceActivity,
+  returnPhase,
+  success,
+  failure,
+}
+
+enum ControlMode {
+  none,
+  spacecraft,
+  astronaut,
+  rover,
+  roboticProbe,
+}
+
 enum MissionGameplayMode {
   orbitalFlight, // Spacecraft flight & maneuvers (Level 1)
   surfaceExploration, // Astronaut on foot on surface (Level 2, 3, 5)
@@ -112,17 +132,18 @@ class MissionModel {
           destinationName: "Moon — Sea of Tranquility (0.67° N, 23.47° E)",
           planetaryData: PlanetaryData.moon,
           historicalInspiration: "Apollo 11 (July 1969) — Humanity's first crewed lunar landing by Neil Armstrong and Buzz Aldrin.",
-          briefingSummary: "Pilot the final lunar descent stage to a safe touchdown in Mare Tranquillitatis. Open the hatch, step onto the regolith as your astronaut, collect 3 geological samples, store them safely in the lander, and prepare for ascent.",
+          briefingSummary: "Pilot the final lunar descent stage to a safe touchdown in Mare Tranquillitatis. Depressurize airlock, open hatch, step onto the regolith as your astronaut, collect 3 designated geological samples, deploy the PSEP seismic instrument, transfer all samples to the lander vault, re-enter cabin, and ignite ascent return.",
           coinReward: 150,
           xpReward: 450,
           gameplayMode: MissionGameplayMode.surfaceExploration,
           objectives: [
-            MissionObjective(key: "soft_landing", description: "Control descent speed (< 4 m/s) and land in safe zone"),
-            MissionObjective(key: "open_hatch_exit", description: "Depressurize airlock, open hatch, and step onto lunar surface"),
-            MissionObjective(key: "collect_basalt", description: "Collect Mare Basalt sample (Sample #10017)"),
-            MissionObjective(key: "collect_breccia", description: "Collect Lunar Impact Breccia sample (Sample #10021)"),
-            MissionObjective(key: "collect_regolith", description: "Collect Fine Regolith soil core (Sample #10005)"),
-            MissionObjective(key: "store_in_lander", description: "Return to lander and transfer samples to secure vault"),
+            MissionObjective(key: "apollo11_landing", description: "Safe touchdown in target zone (speed < 4 m/s, pitch < 15°)"),
+            MissionObjective(key: "apollo11_hatch_exit", description: "Depressurize airlock, open hatch, and step onto surface"),
+            MissionObjective(key: "apollo11_samples", description: "Collect 3 designated lunar samples (0/3)"),
+            MissionObjective(key: "apollo11_deploy_psep", description: "Deploy Early Apollo Surface Experiments Package (PSEP)"),
+            MissionObjective(key: "apollo11_transfer", description: "Transfer all collected samples to lander vault"),
+            MissionObjective(key: "apollo11_ingress", description: "Re-enter lunar module cabin and seal airlock hatch"),
+            MissionObjective(key: "apollo11_return", description: "Ignite ascent engine and confirm return trajectory"),
           ],
           requiredEquipments: ["Lunar Module", "EVA Suit", "Sample Bag", "Descent Landing Legs"],
           nasaSourceKeys: ["Planetary Fact Sheet", "PDS Geosciences", "LRO LOLA", "NASA 3D Resources"],
