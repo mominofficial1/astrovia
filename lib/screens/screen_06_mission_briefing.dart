@@ -1,241 +1,412 @@
 import 'package:flutter/material.dart';
+import '../models/mission_model.dart';
 import '../services/audio_service.dart';
+import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
 import '../widgets/astrovia_video_background.dart';
-import '../widgets/cyber_button.dart';
 import '../widgets/hud_container.dart';
-import 'screen_07_launch_sequence.dart';
+import 'screen_launch_flight.dart';
+import 'screen_rocket_builder.dart';
 
 class Screen06MissionBriefing extends StatelessWidget {
   const Screen06MissionBriefing({super.key});
 
-  void _acceptMission(BuildContext context) {
-    AudioService.instance.playTransition();
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const Screen07LaunchSequence(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          // Dark fade transition per Section 24
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 700),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final objectives = [
-      "01  LAND SAFELY IN SOUTH POLE CRATER",
-      "02  DEPLOY AUTONOMOUS SCIENCE ROVER",
-      "03  SCAN ANOMALOUS GEOLOGICAL SAMPLE",
-      "04  COLLECT SPECTRAL SCIENTIFIC DATA",
-      "05  COMPLETE MISSION & TRANSMIT ARCHIVE",
-    ];
+    final state = MissionState.instance;
+    final mission = state.currentMission ?? MissionModel.allMissions[0];
+    final spacecraft = state.activeSpacecraft;
+    final profile = state.saveData.playerProfile;
+
+    // Preflight validation check
+    final validationErrors = spacecraft.validateForMission(mission.levelNumber);
+    final isFlightReady = validationErrors.isEmpty;
 
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
       body: AstroviaVideoBackground(
-        videoAsset: 'assets/videos/astrovia_intro.mp4',
-        overlayOpacity: 0.40,
-        loop: true,
-        showMuteButton: true,
+        videoAsset: mission.defaultVideoAsset,
+        overlayOpacity: 0.45,
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 14.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Navigation Bar
+                // Top Header Bar
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new_rounded,
                           color: AstroviaTheme.cyan),
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        AudioService.instance.playClick();
+                        Navigator.pop(context);
+                      },
                     ),
-                    Text(
-                      "AEROSPACE MISSION BRIEFING",
-                      style: AstroviaTheme.orbitron(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AstroviaTheme.white,
-                        letterSpacing: 2.2,
+                    Column(
+                      children: [
+                        Text(
+                          "AEROSPACE MISSION DIRECTIVE BRIEFING",
+                          style: AstroviaTheme.orbitron(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.white,
+                            letterSpacing: 2.0,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "${mission.title} • DESTINATION: ${mission.destinationName}",
+                          style: AstroviaTheme.rajdhani(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AstroviaTheme.gold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AstroviaTheme.cyan.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AstroviaTheme.cyan),
+                      ),
+                      child: Text(
+                        "LEVEL ${mission.levelNumber.toString().padLeft(2, '0')}",
+                        style: AstroviaTheme.orbitron(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AstroviaTheme.cyan,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 48),
                   ],
                 ),
                 const SizedBox(height: 12),
 
-                // Main Mission Layout (Left: Directives, Right: Flight Metrics)
+                // Main Content 2-Column Layout:
+                // Left: Mission Directives, Historical Inspiration, Hazards & NASA Sources
+                // Right: Vehicle Preflight Readiness, Commander Loadout & Ignition Trigger
                 Expanded(
                   child: Row(
                     children: [
-                      // Left: Objectives List
+                      // Left Column
                       Expanded(
-                        flex: 7,
-                        child: HudContainer(
-                          isSelected: true,
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Mission Badge
-                              Row(
-                                children: [
+                        flex: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: AstroviaTheme.panelTranslucent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AstroviaTheme.cyan.withValues(alpha: 0.35)),
+                          ),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Historical Inspiration
+                                Text(
+                                  "HISTORICAL NASA MISSION INSPIRATION",
+                                  style: AstroviaTheme.orbitron(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AstroviaTheme.cyan,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  mission.historicalInspiration,
+                                  style: AstroviaTheme.inter(
+                                    fontSize: 12,
+                                    color: AstroviaTheme.white,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                if (mission.disclaimerNotice.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4),
+                                    padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: AstroviaTheme.cyan.withValues(alpha: 0.2),
+                                      color: AstroviaTheme.gold
+                                          .withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(
-                                          color: AstroviaTheme.cyan, width: 1),
+                                          color: AstroviaTheme.gold
+                                              .withValues(alpha: 0.4)),
                                     ),
                                     child: Text(
-                                      "MISSION 01",
-                                      style: AstroviaTheme.orbitron(
-                                        fontSize: 12,
+                                      mission.disclaimerNotice,
+                                      style: AstroviaTheme.rajdhani(
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: AstroviaTheme.cyan,
-                                        letterSpacing: 1.5,
+                                        color: AstroviaTheme.gold,
                                       ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    "LUNAR DISCOVERY",
-                                    style: AstroviaTheme.orbitron(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w900,
-                                      color: AstroviaTheme.white,
-                                      letterSpacing: 2.0,
                                     ),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 12),
+                                const Divider(
+                                    color: Color(0x3319D9FF), height: 18),
 
-                              // Primary Directive
-                              Text(
-                                "EXPLORE THE LUNAR SURFACE AND COLLECT SCIENTIFIC DATA.",
-                                style: AstroviaTheme.rajdhani(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AstroviaTheme.cyan,
-                                  letterSpacing: 1.2,
+                                // Required Objectives Checklist
+                                Text(
+                                  "PRIMARY FLIGHT OBJECTIVES",
+                                  style: AstroviaTheme.orbitron(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AstroviaTheme.gold,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              Text(
-                                "OPERATIONAL FLIGHT OBJECTIVES:",
-                                style: AstroviaTheme.rajdhani(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: AstroviaTheme.secondary,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-
-                              // Objectives Check-list
-                              Expanded(
-                                child: ListView.separated(
-                                  itemCount: objectives.length,
-                                  separatorBuilder: (_, _) =>
-                                      const SizedBox(height: 6),
-                                  itemBuilder: (context, index) {
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: AstroviaTheme.panel,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: AstroviaTheme.cyan
-                                              .withValues(alpha: 0.2),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
+                                const SizedBox(height: 8),
+                                ...mission.objectives.map((obj) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 6.0),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
                                             Icons.radio_button_unchecked_rounded,
-                                            size: 16,
-                                            color: AstroviaTheme.cyan,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            objectives[index],
+                                            size: 14,
+                                            color: AstroviaTheme.cyan),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            obj.description,
                                             style: AstroviaTheme.rajdhani(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
                                               color: AstroviaTheme.white,
-                                              letterSpacing: 1.0,
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    );
-                                  },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                                const Divider(
+                                    color: Color(0x3319D9FF), height: 18),
+
+                                // Expected Hazards & Environmental Specs
+                                Text(
+                                  "ENVIRONMENTAL HAZARDS & PHYSICS",
+                                  style: AstroviaTheme.orbitron(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AstroviaTheme.red,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                Text(
+                                  mission.environmentHazard,
+                                  style: AstroviaTheme.inter(
+                                    fontSize: 12,
+                                    color: AstroviaTheme.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  "Surface Gravity: ${mission.planetaryData.surfaceGravity} m/s² • Atmospheric Pressure: ${mission.planetaryData.atmosphericPressure} kPa",
+                                  style: AstroviaTheme.rajdhani(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AstroviaTheme.cyan,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
 
-                      // Right: Metrics Panel + Acceptance Button
+                      // Right Column: Spacecraft & Commander Check
                       Expanded(
                         flex: 4,
                         child: Column(
                           children: [
-                            Expanded(
-                              child: HudContainer(
-                                padding: const EdgeInsets.all(18.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    _buildMetricBlock(
-                                      "DIFFICULTY",
-                                      "MEDIUM",
-                                      AstroviaTheme.gold,
-                                      Icons.speed_rounded,
+                            // Spacecraft Build Readiness Card
+                            HudContainer(
+                              isSelected: isFlightReady,
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        "ASSIGNED VEHICLE",
+                                        style: AstroviaTheme.orbitron(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: AstroviaTheme.cyan,
+                                        ),
+                                      ),
+                                      Icon(
+                                        isFlightReady
+                                            ? Icons.check_circle_rounded
+                                            : Icons.warning_amber_rounded,
+                                        color: isFlightReady
+                                            ? AstroviaTheme.green
+                                            : AstroviaTheme.red,
+                                        size: 18,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    spacecraft.name,
+                                    style: AstroviaTheme.orbitron(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AstroviaTheme.white,
                                     ),
-                                    _buildMetricBlock(
-                                      "ESTIMATED TIME",
-                                      "08:00",
-                                      AstroviaTheme.white,
-                                      Icons.timer_outlined,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "Mass: ${spacecraft.totalMassKg.toInt()} kg • Liftoff Thrust: ${spacecraft.totalLiftoffThrustKn.toStringAsFixed(0)} kN • Earth TWR: ${spacecraft.twrEarth.toStringAsFixed(2)}",
+                                    style: AstroviaTheme.rajdhani(
+                                      fontSize: 11,
+                                      color: AstroviaTheme.secondary,
                                     ),
-                                    _buildMetricBlock(
-                                      "SCIENTIFIC VALUE",
-                                      "HIGH",
-                                      AstroviaTheme.cyan,
-                                      Icons.science_outlined,
+                                  ),
+                                  if (!isFlightReady) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      validationErrors.first,
+                                      style: AstroviaTheme.inter(
+                                        fontSize: 11,
+                                        color: AstroviaTheme.red,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        backgroundColor: AstroviaTheme.panel,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          PageRouteBuilder(
+                                            pageBuilder: (ctx, a1, a2) =>
+                                                const ScreenRocketBuilder(),
+                                          ),
+                                        );
+                                      },
+                                      child: Text(
+                                        "OPEN ASSEMBLY HANGAR TO FIX",
+                                        style: AstroviaTheme.orbitron(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: AstroviaTheme.cyan,
+                                        ),
+                                      ),
                                     ),
                                   ],
-                                ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
 
-                            // Accept Mission Button
+                            // Commander Loadout Summary
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AstroviaTheme.panelTranslucent,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: AstroviaTheme.cyan
+                                        .withValues(alpha: 0.3)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "ACTIVE COMMANDER",
+                                    style: AstroviaTheme.orbitron(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AstroviaTheme.gold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "${profile.character.name} [CALLSIGN: ${profile.callsign}]",
+                                    style: AstroviaTheme.rajdhani(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AstroviaTheme.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    "Suit: ${profile.currentSuit.name} • PLSS: ${profile.backpackType}",
+                                    style: AstroviaTheme.inter(
+                                      fontSize: 11,
+                                      color: AstroviaTheme.secondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+
+                            // Ignition Launch Button
                             SizedBox(
                               width: double.infinity,
-                              child: CyberButton(
-                                label: "ACCEPT MISSION",
-                                icon: Icons.flight_takeoff_rounded,
-                                variant: CyberButtonVariant.cyan,
-                                height: 50,
-                                fontSize: 15,
-                                onPressed: () => _acceptMission(context),
+                              height: 52,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isFlightReady
+                                      ? AstroviaTheme.cyan
+                                          .withValues(alpha: 0.35)
+                                      : Colors.grey.withValues(alpha: 0.2),
+                                  side: BorderSide(
+                                    color: isFlightReady
+                                        ? AstroviaTheme.cyan
+                                        : Colors.grey,
+                                    width: 1.8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.rocket_launch_rounded,
+                                    color: AstroviaTheme.white, size: 22),
+                                label: Text(
+                                  "INITIALIZE LAUNCH COUNTDOWN",
+                                  style: AstroviaTheme.orbitron(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AstroviaTheme.white,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                onPressed: isFlightReady
+                                    ? () {
+                                        AudioService.instance.playTransition();
+                                        Navigator.pushReplacement(
+                                          context,
+                                          PageRouteBuilder(
+                                            pageBuilder: (ctx, a1, a2) =>
+                                                ScreenLaunchFlight(
+                                                    mission: mission),
+                                            transitionsBuilder:
+                                                (ctx, a1, a2, child) =>
+                                                    FadeTransition(
+                                                        opacity: a1,
+                                                        child: child),
+                                            transitionDuration:
+                                                const Duration(milliseconds: 700),
+                                          ),
+                                        );
+                                      }
+                                    : null,
                               ),
                             ),
                           ],
@@ -248,45 +419,6 @@ class Screen06MissionBriefing extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildMetricBlock(
-      String label, String value, Color color, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AstroviaTheme.panel,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 28, color: color),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: AstroviaTheme.rajdhani(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AstroviaTheme.secondary,
-                ),
-              ),
-              Text(
-                value,
-                style: AstroviaTheme.orbitron(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

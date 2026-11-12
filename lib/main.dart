@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player_win/video_player_win.dart';
 import 'screens/screen_01_cinematic_entry.dart';
+import 'services/save_manager.dart';
+import 'state/mission_state.dart';
 import 'theme/astrovia_theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Catch any unhandled Flutter framework errors
+  // Catch unhandled Flutter framework errors
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     if (kDebugMode) {
@@ -17,12 +19,12 @@ void main() {
     }
   };
 
-  // Catch any unhandled asynchronous platform errors to prevent application closing
+  // Catch unhandled asynchronous platform errors to prevent crashing
   PlatformDispatcher.instance.onError = (error, stack) {
     if (kDebugMode) {
       print('PlatformDispatcher error caught: $error\n$stack');
     }
-    return true; // Return true to prevent app crash
+    return true;
   };
 
   // Register Windows Media Foundation video player plugin on Windows
@@ -32,16 +34,26 @@ void main() {
     } catch (_) {}
   }
 
-  // Force Landscape Orientation for Android & Mobile (Section 6, 13, 21)
+  // Force Landscape Orientation for Spacecraft and Planetary Exploration Displays
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Full-screen immersive mode (no Android system navigation bars obstructing the game)
+  // Full-screen immersive sticky mode
   try {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   } catch (_) {}
+
+  // Initialize offline persistent save system
+  try {
+    await SaveManager.instance.init();
+    MissionState.instance.refreshFromSave();
+  } catch (e) {
+    if (kDebugMode) {
+      print("SaveManager startup error: $e");
+    }
+  }
 
   runApp(const AstroviaApp());
 }
@@ -52,7 +64,7 @@ class AstroviaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ASTROVIA — The Journey Through Space',
+      title: 'ASTRAVIA — THE JOURNEY THROUGH SPACE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

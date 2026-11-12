@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import '../models/mission_model.dart';
 import '../services/audio_service.dart';
 import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
 import '../widgets/astrovia_video_background.dart';
-import '../widgets/cyber_button.dart';
-import '../widgets/hud_container.dart';
-import 'screen_02_mission_control.dart';
+import 'screen_06_mission_briefing.dart';
+import 'screen_mission_map.dart';
 
 class Screen10MissionResults extends StatefulWidget {
   const Screen10MissionResults({super.key});
@@ -16,279 +16,398 @@ class Screen10MissionResults extends StatefulWidget {
 
 class _Screen10MissionResultsState extends State<Screen10MissionResults>
     with SingleTickerProviderStateMixin {
-  late AnimationController _scoreAnimController;
-  late Animation<double> _scoreAnimation;
+  late AnimationController _animController;
+  Map<String, dynamic> _results = {};
+  bool _evaluated = false;
 
   @override
   void initState() {
     super.initState();
     AudioService.instance.playSuccess();
-    _scoreAnimController = AnimationController(
+    _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
-    );
-    _scoreAnimation = CurvedAnimation(
-      parent: _scoreAnimController,
-      curve: Curves.easeOutCubic,
-    );
-    _scoreAnimController.forward();
+    )..forward();
+
+    // Evaluate mission completion once and award rewards safely
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_evaluated) {
+        _evaluated = true;
+        final res = MissionState.instance.completeMissionSuccess(
+          baseScore: 1250,
+          timeSeconds: 180,
+        );
+        setState(() {
+          _results = res;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _scoreAnimController.dispose();
+    _animController.dispose();
     super.dispose();
   }
 
-  void _returnToMissionControl() {
-    MissionState.instance.resetMission();
-    Navigator.of(context).pushAndRemoveUntil(
+  void _goToMissionMap() {
+    AudioService.instance.playClick();
+    Navigator.pushAndRemoveUntil(
+      context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const Screen02MissionControl(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (ctx, a1, a2) => const ScreenMissionMap(),
+        transitionsBuilder: (ctx, a1, a2, child) =>
+            FadeTransition(opacity: a1, child: child),
       ),
       (route) => false,
     );
   }
 
+  void _replayMission() {
+    final mission = MissionState.instance.currentMission;
+    if (mission != null) {
+      AudioService.instance.playTransition();
+      MissionState.instance.startMission(mission);
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (ctx, a1, a2) => const Screen06MissionBriefing(),
+          transitionsBuilder: (ctx, a1, a2, child) =>
+              FadeTransition(opacity: a1, child: child),
+        ),
+      );
+    }
+  }
+
+  void _nextMission() {
+    final current = MissionState.instance.currentMission;
+    if (current != null && current.levelNumber < 10) {
+      final nextMission = MissionModel.allMissions[current.levelNumber];
+      AudioService.instance.playTransition();
+      MissionState.instance.startMission(nextMission);
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (ctx, a1, a2) => const Screen06MissionBriefing(),
+          transitionsBuilder: (ctx, a1, a2, child) =>
+              FadeTransition(opacity: a1, child: child),
+        ),
+      );
+    } else {
+      _goToMissionMap();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final state = MissionState.instance;
+    final mission = state.currentMission ?? MissionModel.allMissions[0];
+    final coinsAwarded = _results['coinsAwarded'] ?? mission.coinReward;
+    final xpAwarded = _results['xpAwarded'] ?? mission.xpReward;
+    final stars = _results['stars'] as int? ?? 3;
+    final isFirstClear = _results['isFirstClear'] as bool? ?? true;
+    final campaignCompleted = _results['campaignCompleted'] as bool? ?? false;
+
     return Scaffold(
       backgroundColor: AstroviaTheme.darkSpace,
       body: AstroviaVideoBackground(
         videoAsset: 'assets/videos/astrovia_intro.mp4',
-        overlayOpacity: 0.42,
-        loop: true,
-        showMuteButton: true,
+        overlayOpacity: 0.45,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Header Badge
+                // Top Success Badge
                 Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 6),
+                        horizontal: 20, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AstroviaTheme.green.withValues(alpha: 0.18),
+                      color: AstroviaTheme.green.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: AstroviaTheme.green, width: 1.5),
+                      border: Border.all(color: AstroviaTheme.green, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AstroviaTheme.green.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
                     child: Text(
-                      "★ MISSION SUCCESSFUL ★",
+                      campaignCompleted
+                          ? "★ GRAND CAMPAIGN ACCOMPLISHED ★"
+                          : "★ MISSION ACCOMPLISHED ★",
                       style: AstroviaTheme.orbitron(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: AstroviaTheme.green,
-                        letterSpacing: 2.5,
+                        letterSpacing: 2.2,
                       ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Main Mission Title
+                Center(
+                  child: Text(
+                    mission.title,
+                    textAlign: TextAlign.center,
+                    style: AstroviaTheme.orbitron(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: AstroviaTheme.white,
+                      letterSpacing: 1.8,
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
 
-                // Main Title: MISSION COMPLETE - LUNAR DISCOVERY
+                // Star Rating Stars
                 Center(
-                  child: Text(
-                    "MISSION COMPLETE",
-                    style: AstroviaTheme.orbitron(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: AstroviaTheme.white,
-                      letterSpacing: 3.0,
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Text(
-                    "SECTOR: LUNAR DISCOVERY • MOMIN COMMANDING",
-                    style: AstroviaTheme.rajdhani(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AstroviaTheme.cyan,
-                      letterSpacing: 1.5,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (i) {
+                      final hasStar = i < stars;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Icon(
+                          hasStar ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: hasStar ? AstroviaTheme.gold : AstroviaTheme.secondary,
+                          size: 32,
+                        ),
+                      );
+                    }),
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Middle: Telemetry Statistics + Educational Debriefing
+                // Main Results Breakdown Layout
                 Expanded(
                   child: Row(
                     children: [
-                      // Left: Animated Statistics
+                      // Left: Objectives Verified List
                       Expanded(
-                        flex: 5,
-                        child: HudContainer(
-                          isSelected: true,
-                          isGold: true,
-                          padding: const EdgeInsets.all(16.0),
-                          child: AnimatedBuilder(
-                            animation: _scoreAnimation,
-                            builder: (context, child) {
-                              return Column(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  _buildStatItem(
-                                      "MISSION SCORE",
-                                      "${(87 * _scoreAnimation.value).toInt()}%",
-                                      AstroviaTheme.gold),
-                                  const Divider(
-                                      color: Colors.white12, height: 10),
-                                  _buildStatItem(
-                                      "SCIENTIFIC DATA",
-                                      "+${(250 * _scoreAnimation.value).toInt()}",
-                                      AstroviaTheme.cyan),
-                                  const Divider(
-                                      color: Colors.white12, height: 10),
-                                  _buildStatItem(
-                                      "EXPLORATION POINTS",
-                                      "+${(180 * _scoreAnimation.value).toInt()}",
-                                      AstroviaTheme.blue),
-                                  const Divider(
-                                      color: Colors.white12, height: 10),
-                                  _buildStatItem(
-                                      "ACCURACY RATING",
-                                      "${(92 * _scoreAnimation.value).toInt()}%",
-                                      AstroviaTheme.green),
-                                  const Divider(
-                                      color: Colors.white12, height: 10),
-                                  _buildStatItem(
-                                      "TOTAL MISSION TIME",
-                                      "08:42",
-                                      AstroviaTheme.white),
-                                ],
-                              );
-                            },
+                        flex: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AstroviaTheme.panelTranslucent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AstroviaTheme.cyan.withValues(alpha: 0.35)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "VERIFIED MISSION DIRECTIVES",
+                                style: AstroviaTheme.orbitron(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AstroviaTheme.cyan,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Expanded(
+                                child: ListView.separated(
+                                  itemCount: mission.objectives.length,
+                                  separatorBuilder: (ctx, i) =>
+                                      const SizedBox(height: 6),
+                                  itemBuilder: (ctx, idx) {
+                                    final obj = mission.objectives[idx];
+                                    return Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_rounded,
+                                            size: 16,
+                                            color: AstroviaTheme.green),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            obj.description,
+                                            style: AstroviaTheme.rajdhani(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                              color: AstroviaTheme.white,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          "PASSED",
+                                          style: AstroviaTheme.orbitron(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AstroviaTheme.green,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
 
-                      // Right: What You Discovered & What You Learned
+                      // Right: Rewards & Progression Card
                       Expanded(
-                        flex: 6,
-                        child: Column(
-                          children: [
-                            // WHAT YOU DISCOVERED
-                            Expanded(
-                              child: HudContainer(
-                                padding: const EdgeInsets.all(14.0),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                            Icons.military_tech_rounded,
-                                            color: AstroviaTheme.gold,
-                                            size: 20),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "WHAT YOU DISCOVERED",
-                                          style: AstroviaTheme.orbitron(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: AstroviaTheme.gold,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      "• Ilmenite Lunar Regolith containing high-yield Helium-3.\n"
-                                      "• Sub-surface volcanic lava tube ideal for lunar habitat shielding.\n"
-                                      "• Trace water-ice crystals located in permanently shadowed crater rims.",
-                                      style: AstroviaTheme.inter(
-                                        fontSize: 12,
-                                        color: AstroviaTheme.white,
-                                        height: 1.45,
-                                      ),
-                                    ),
-                                  ],
+                        flex: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AstroviaTheme.panelTranslucent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AstroviaTheme.gold.withValues(alpha: 0.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "MISSION PAYOUT & EXPEDITION XP",
+                                style: AstroviaTheme.orbitron(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AstroviaTheme.gold,
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // WHAT YOU LEARNED
-                            Expanded(
-                              child: HudContainer(
-                                padding: const EdgeInsets.all(14.0),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.school_rounded,
-                                            color: AstroviaTheme.cyan,
-                                            size: 20),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          "WHAT YOU LEARNED",
-                                          style: AstroviaTheme.orbitron(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: AstroviaTheme.cyan,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      "Planetary exploration relies on remote autonomous spectrometers to identify mineralogy before human crew deployment. In-situ resource utilization (ISRU) reduces mission launch mass by 70%.",
-                                      style: AstroviaTheme.inter(
-                                        fontSize: 12,
-                                        color: AstroviaTheme.secondary,
-                                        height: 1.45,
-                                      ),
-                                    ),
-                                  ],
+                              const SizedBox(height: 14),
+                              _buildRewardTile(
+                                "+$coinsAwarded COINS",
+                                isFirstClear
+                                    ? "Full first-completion bounty"
+                                    : "Repeat expedition grant (25%)",
+                                Icons.monetization_on_rounded,
+                                AstroviaTheme.gold,
+                              ),
+                              const SizedBox(height: 10),
+                              _buildRewardTile(
+                                "+$xpAwarded FLIGHT XP",
+                                "Scientific telemetry archival reward",
+                                Icons.military_tech_rounded,
+                                AstroviaTheme.cyan,
+                              ),
+                              const SizedBox(height: 10),
+                              if (mission.levelNumber < 10)
+                                _buildRewardTile(
+                                  "LEVEL ${mission.levelNumber + 1} UNLOCKED",
+                                  MissionModel.allMissions[mission.levelNumber].title,
+                                  Icons.lock_open_rounded,
+                                  AstroviaTheme.green,
+                                ),
+                              const Spacer(),
+                              Text(
+                                "TOTAL COINS: ${state.saveData.coins}  •  TOTAL XP: ${state.saveData.xp}",
+                                style: AstroviaTheme.orbitron(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AstroviaTheme.secondary,
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
-                // Bottom Action: NEXT MISSION & RETURN TO MISSION CONTROL
+                // Bottom Action Buttons
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    CyberButton(
-                      label: "NEXT MISSION: MARS RECON",
-                      icon: Icons.rocket_launch_rounded,
-                      variant: CyberButtonVariant.gold,
-                      minWidth: 260,
-                      height: 48,
-                      fontSize: 14,
-                      onPressed: _returnToMissionControl,
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        backgroundColor: AstroviaTheme.panelGlass,
+                        side: BorderSide(
+                            color: AstroviaTheme.cyan.withValues(alpha: 0.5)),
+                      ),
+                      icon: const Icon(Icons.map_rounded,
+                          color: AstroviaTheme.cyan, size: 18),
+                      label: Text(
+                        "MISSION MAP",
+                        style: AstroviaTheme.orbitron(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AstroviaTheme.cyan,
+                        ),
+                      ),
+                      onPressed: _goToMissionMap,
                     ),
-                    const SizedBox(width: 18),
-                    CyberButton(
-                      label: "RETURN TO MISSION CONTROL",
-                      icon: Icons.home_rounded,
-                      variant: CyberButtonVariant.transparent,
-                      minWidth: 240,
-                      height: 48,
-                      fontSize: 13,
-                      onPressed: _returnToMissionControl,
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            backgroundColor: AstroviaTheme.panelGlass,
+                            side: BorderSide(
+                                color: AstroviaTheme.gold.withValues(alpha: 0.5)),
+                          ),
+                          icon: const Icon(Icons.refresh_rounded,
+                              color: AstroviaTheme.gold, size: 18),
+                          label: Text(
+                            "REPLAY MISSION",
+                            style: AstroviaTheme.orbitron(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AstroviaTheme.gold,
+                            ),
+                          ),
+                          onPressed: _replayMission,
+                        ),
+                        const SizedBox(width: 12),
+                        if (mission.levelNumber < 10)
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  AstroviaTheme.cyan.withValues(alpha: 0.3),
+                              side: const BorderSide(color: AstroviaTheme.cyan),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 12),
+                            ),
+                            icon: const Icon(Icons.arrow_forward_rounded,
+                                color: AstroviaTheme.white, size: 18),
+                            label: Text(
+                              "NEXT MISSION ►",
+                              style: AstroviaTheme.orbitron(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AstroviaTheme.white,
+                              ),
+                            ),
+                            onPressed: _nextMission,
+                          )
+                        else
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  AstroviaTheme.gold.withValues(alpha: 0.35),
+                              side: const BorderSide(color: AstroviaTheme.gold),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 12),
+                            ),
+                            icon: const Icon(Icons.emoji_events_rounded,
+                                color: AstroviaTheme.gold, size: 18),
+                            label: Text(
+                              "CAMPAIGN VICTORY ► MAP",
+                              style: AstroviaTheme.orbitron(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AstroviaTheme.gold,
+                              ),
+                            ),
+                            onPressed: _goToMissionMap,
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -300,29 +419,43 @@ class _Screen10MissionResultsState extends State<Screen10MissionResults>
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: AstroviaTheme.rajdhani(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: AstroviaTheme.secondary,
-            letterSpacing: 1.0,
+  Widget _buildRewardTile(
+      String title, String subtitle, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AstroviaTheme.darkSpace,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AstroviaTheme.orbitron(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: AstroviaTheme.inter(
+                    fontSize: 10,
+                    color: AstroviaTheme.secondary,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        Text(
-          value,
-          style: AstroviaTheme.orbitron(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

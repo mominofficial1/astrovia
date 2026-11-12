@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/audio_service.dart';
+import '../state/mission_state.dart';
 import '../theme/astrovia_theme.dart';
 import '../widgets/astrovia_video_background.dart';
 import '../widgets/cyber_button.dart';
@@ -68,19 +69,122 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
     super.dispose();
   }
 
-  void _navigateToMissionControl() {
+  void _proceedToMissionControl() {
     AudioService.instance.playTransition();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             const Screen02MissionControl(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: animation,
-            child: child,
+          final fadeAnim = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeInOutCubic,
           );
+          return FadeTransition(opacity: fadeAnim, child: child);
         },
-        transitionDuration: const Duration(milliseconds: 800),
+        transitionDuration: const Duration(milliseconds: 600),
+      ),
+    );
+  }
+
+  void _showFirstTimeSetupDialog() {
+    AudioService.instance.playClick();
+    final textController =
+        TextEditingController(text: MissionState.instance.astronautName);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AstroviaTheme.panel,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: AstroviaTheme.cyan, width: 1.5),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "MISSION CALLSIGN REGISTRATION",
+                style: AstroviaTheme.orbitron(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AstroviaTheme.cyan,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Welcome to ASTRAVIA! Enter your explorer commander name to initialize flight credentials. No account required.",
+                style: AstroviaTheme.inter(
+                  fontSize: 12,
+                  color: AstroviaTheme.white,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: textController,
+                autofocus: true,
+                style: AstroviaTheme.orbitron(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AstroviaTheme.white,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: AstroviaTheme.darkSpace,
+                  labelText: "COMMANDER CALLSIGN",
+                  labelStyle: AstroviaTheme.rajdhani(
+                    color: AstroviaTheme.cyan,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  prefixIcon: const Icon(Icons.person_pin_rounded,
+                      color: AstroviaTheme.cyan),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(
+                        color: AstroviaTheme.cyan.withValues(alpha: 0.5)),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide:
+                        BorderSide(color: AstroviaTheme.cyan, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          AstroviaTheme.cyan.withValues(alpha: 0.3),
+                      side: const BorderSide(color: AstroviaTheme.cyan),
+                    ),
+                    onPressed: () {
+                      if (textController.text.trim().isNotEmpty) {
+                        MissionState.instance
+                            .setAstronautName(textController.text);
+                      }
+                      Navigator.pop(ctx);
+                      _proceedToMissionControl();
+                    },
+                    child: Text(
+                      "LAUNCH COMMAND HUB",
+                      style: AstroviaTheme.orbitron(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AstroviaTheme.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -91,150 +195,130 @@ class _Screen01CinematicEntryState extends State<Screen01CinematicEntry>
       backgroundColor: AstroviaTheme.darkSpace,
       body: AstroviaVideoBackground(
         videoAsset: 'assets/videos/astrovia_intro.mp4',
-        overlayOpacity: 0.28,
+        overlayOpacity: 0.38,
         loop: true,
         showMuteButton: true,
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Stack(
+            children: [
+              // Skip Video button in top-right
+              Positioned(
+                top: 16,
+                right: 20,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: AstroviaTheme.panelGlass,
+                    side: BorderSide(
+                        color: AstroviaTheme.cyan.withValues(alpha: 0.4)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                  icon: const Icon(Icons.skip_next_rounded,
+                      color: AstroviaTheme.cyan, size: 16),
+                  label: Text(
+                    "SKIP INTRO",
+                    style: AstroviaTheme.orbitron(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AstroviaTheme.cyan,
+                    ),
+                  ),
+                  onPressed: _proceedToMissionControl,
+                ),
+              ),
+
+              // NASA Space Apps 2026 Challenge Identification Tag
+              Positioned(
+                top: 16,
+                left: 20,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AstroviaTheme.panelGlass,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                        color: AstroviaTheme.gold.withValues(alpha: 0.6)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.public_rounded,
+                          size: 14, color: AstroviaTheme.gold),
+                      const SizedBox(width: 6),
+                      Text(
+                        "NASA INTERNATIONAL SPACE APPS CHALLENGE 2026",
+                        style: AstroviaTheme.orbitron(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: AstroviaTheme.gold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Central Title and Launch Button
+              Center(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Official Logo Icon
-                    FadeTransition(
-                      opacity: _titleOpacity,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AstroviaTheme.cyan.withValues(alpha: 0.4),
-                              blurRadius: 24,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            'assets/images/astrovia_logo.png',
-                            width: 68,
-                            height: 68,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Badge: Deep Space Exploration Archive
-                    FadeTransition(
-                      opacity: _titleOpacity,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AstroviaTheme.panelGlass,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AstroviaTheme.cyan.withValues(alpha: 0.5),
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          "DEEP SPACE EXPLORATION ARCHIVE",
-                          style: AstroviaTheme.rajdhani(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2.2,
-                            color: AstroviaTheme.cyan,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Main Title: ASTROVIA with soft white and cyan glow
+                    // ASTRAVIA Title
                     FadeTransition(
                       opacity: _titleOpacity,
                       child: Text(
-                        "ASTROVIA",
-                        textAlign: TextAlign.center,
+                        "ASTRAVIA",
                         style: AstroviaTheme.orbitron(
-                          fontSize: 54,
+                          fontSize: 48,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 8.0,
                           color: AstroviaTheme.white,
-                        ).copyWith(
-                          shadows: [
-                            Shadow(
-                              color: AstroviaTheme.cyan.withValues(alpha: 0.8),
-                              blurRadius: 28,
-                            ),
-                            Shadow(
-                              color: AstroviaTheme.blue.withValues(alpha: 0.5),
-                              blurRadius: 40,
-                            ),
-                          ],
+                          letterSpacing: 6.0,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
 
-                    // Subtitle: THE JOURNEY THROUGH SPACE
+                    // Tagline
                     FadeTransition(
                       opacity: _subtitleOpacity,
                       child: Text(
                         "THE JOURNEY THROUGH SPACE",
-                        textAlign: TextAlign.center,
                         style: AstroviaTheme.rajdhani(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 4.5,
-                          color: AstroviaTheme.secondary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AstroviaTheme.cyan,
+                          letterSpacing: 4.0,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 32),
 
-                    // Action Buttons: BEGIN MISSION & SKIP INTRO
+                    // Enter Mission Control / First-time Launch Button
                     SlideTransition(
                       position: _buttonSlide,
                       child: FadeTransition(
                         opacity: _buttonOpacity,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CyberButton(
-                              label: "BEGIN MISSION",
-                              icon: Icons.rocket_launch_outlined,
-                              variant: CyberButtonVariant.cyan,
-                              minWidth: 220,
-                              height: 52,
-                              fontSize: 15,
-                              onPressed: _navigateToMissionControl,
-                            ),
-                            const SizedBox(width: 20),
-                            CyberButton(
-                              label: "SKIP INTRO",
-                              variant: CyberButtonVariant.transparent,
-                              minWidth: 150,
-                              height: 52,
-                              fontSize: 14,
-                              onPressed: _navigateToMissionControl,
-                            ),
-                          ],
+                        child: CyberButton(
+                          label: "INITIALIZE MISSION CONTROL",
+                          icon: Icons.rocket_launch_rounded,
+                          variant: CyberButtonVariant.cyan,
+                          minWidth: 320,
+                          height: 52,
+                          onPressed: () {
+                            if (MissionState.instance.saveData.tutorialCompleted) {
+                              _proceedToMissionControl();
+                            } else {
+                              _showFirstTimeSetupDialog();
+                            }
+                          },
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
